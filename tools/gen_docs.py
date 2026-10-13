@@ -33,7 +33,7 @@ PAGES = [
     ("agent-tooling.md",   "Agent Tooling"),
 ]
 
-CSS = """/* aris-ui docs — night forest: dark blue-black, pine hints, no gradients */
+CSS = """/* aris-ui docs — dark blue-black surfaces, steel-blue accent, no gradients */
 :root {
   --bg: #0a0e14;          /* near-black blue */
   --bg2: #0d1219;         /* raised surface */
@@ -41,9 +41,9 @@ CSS = """/* aris-ui docs — night forest: dark blue-black, pine hints, no gradi
   --line: #1d2836;        /* hairline borders */
   --text: #e6edf3;        /* primary */
   --dim: #8b949e;         /* secondary */
-  --accent: #7c5cff;      /* violet, sparing */
-  --accent-soft: #a394ff;
-  --pine: #4e6e5e;        /* muted forest green for small details */
+  --accent: #7fa8cc;      /* steel blue, sparing */
+  --accent-soft: #a9c6de;
+  --pine: #4e6e5e;        /* muted green for tiny details only */
   --mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
   --sans: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
 }
@@ -59,7 +59,7 @@ a:hover { text-decoration: underline; }
 code {
   font-family: var(--mono); font-size: 0.86em;
   background: var(--panel); border: 1px solid var(--line);
-  border-radius: 5px; padding: 0.08em 0.4em; color: #d2e3dc;
+  border-radius: 5px; padding: 0.08em 0.4em; color: #d6e0ea;
 }
 pre {
   background: var(--panel); border: 1px solid var(--line);
@@ -109,7 +109,7 @@ HEADER = """<header class="site">
 </header>"""
 
 FOOTER = """<footer class="site">
-  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>aris-ui — MIT licensed. C++20 · OpenGL 3.3.</span>
   <span>Generated {date} · <a href="{repo}">source</a></span>
 </footer>"""
 

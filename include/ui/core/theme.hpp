@@ -12,11 +12,11 @@ struct Theme {
 
     Color text          = Color::Hex(0xE6EDF3);
     Color textDim       = Color::Hex(0x8B949E);
-    Color textOnAccent  = Color::Hex(0xFFFFFF);
+    Color textOnAccent  = Color::Hex(0x0B0F14);   // dark text on the light accent
 
-    Color accent        = Color::Hex(0x7C5CFF);   // violet accent
-    Color accentHover   = Color::Hex(0x9277FF);
-    Color accentActive  = Color::Hex(0x6A4CE0);
+    Color accent        = Color::Hex(0x7FA8CC);   // steel blue accent
+    Color accentHover   = Color::Hex(0x94BBD9);
+    Color accentActive  = Color::Hex(0x6A92B7);
 
     Color controlBg     = Color::Hex(0x232830);   // inactive control surface
     Color controlBgHover= Color::Hex(0x2C323C);

@@ -11,9 +11,9 @@
   .hero { padding: 84px 0 56px; max-width: 820px; }
   .kicker {
     font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--pine); margin-bottom: 22px;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 22px;
   }
-  .kicker::before { content: "▮ "; color: var(--accent); }
+  .kicker::before { content: "▮ "; color: var(--accent-soft); }
   .hero h1 {
     font-size: clamp(2.1em, 5vw, 3.3em); line-height: 1.12; margin: 0 0 20px;
     letter-spacing: -0.02em; font-weight: 700;
@@ -26,7 +26,7 @@
     border: 1px solid var(--line); color: var(--text);
   }
   .btn:hover { text-decoration: none; border-color: var(--accent); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #0b0f14; font-weight: 600; }
   .btn.primary:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
   .btn code { background: none; border: none; padding: 0; }
 
@@ -34,12 +34,12 @@
     border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
     background: var(--bg2); box-shadow: 0 22px 60px rgba(0,0,0,0.45);
   }
-  .shot img { display: block; width: 100%; height: 560px; object-fit: cover; object-position: top; }
+  .shot img { display: block; width: 100%; height: auto; }
   .shot figcaption {
     font-family: var(--mono); font-size: 12px; color: var(--dim);
     padding: 10px 16px; border-top: 1px solid var(--line);
   }
-  .shot figcaption b { color: var(--pine); font-weight: 500; }
+  .shot figcaption b { color: var(--accent); font-weight: 500; }
 
   section { margin: 72px 0; }
   h2.sec {
@@ -71,7 +71,7 @@
   .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
   @media (max-width: 780px) { .quick { grid-template-columns: 1fr; } }
   .quick .step { font-size: 13px; color: var(--dim); font-family: var(--mono); margin-bottom: 8px; }
-  .quick .step b { color: var(--pine); font-weight: 600; }
+  .quick .step b { color: var(--accent); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -91,23 +91,24 @@
     <div class="kicker">C++20 · OpenGL 3.3 · MIT</div>
     <h1>A more beautiful <em>ImGui</em> replacement.<br>Optimised for agents.</h1>
     <p class="lead">
-      An immediate-mode UI toolkit for OpenGL overlay injection — SDF-rendered
-      widgets, MSDF text that stays crisp at any scale, flexbox panels — with a
-      headless preview and test toolchain your coding agent can run and <b>see</b>.
+      An immediate-mode UI toolkit for OpenGL overlay injection. Widgets are drawn as
+      analytic signed-distance fields, text comes from offline MSDF atlases, layout is
+      Yoga flexbox — and the whole thing renders headlessly to PNG so a coding agent can
+      build, test and <b>look</b> at its own work.
     </p>
     <div class="cta">
       <a class="btn primary" href="getting-started.html">Get started</a>
-      <a class="btn" href="agent-tooling.html"><code>make verify</code>&nbsp;→ PNGs &amp; tests</a>
+      <a class="btn" href="agent-tooling.html"><code>make verify</code>&nbsp;→ tests &amp; PNGs</a>
     </div>
     <figure class="shot">
-      <img src="assets/panel.png" alt="aris-ui demo panel: buttons, toggles, sliders and a live preview card" width="560" height="720">
-      <figcaption><b>aris_scene_preview --scene panel</b> — headless framebuffer dump, not a mockup</figcaption>
+      <img src="assets/hud-wide.png" alt="Mock game overlay rendered by aris-ui: module arraylist, ESP boxes with health bars, nametags and a hotbar over a night scene" width="1280" height="800">
+      <figcaption><b>aris_scene_preview --scene hud</b> — headless framebuffer dump, not a mockup</figcaption>
     </figure>
   </section>
 
   <section>
-    <h2 class="sec">Designed like a still forest at night</h2>
-    <p class="sec-sub">Calm dark surfaces, precise hairlines, one restrained accent. No gradients, no noise — pixels that behave.</p>
+    <h2 class="sec">What you get</h2>
+    <p class="sec-sub">The rendering quality of a hand-written overlay UI, with none of the shader debugging.</p>
     <div class="grid">
       <div class="card">
         <h3>SDF shapes<span class="tag">renderer</span></h3>
@@ -131,14 +132,14 @@
       </div>
       <div class="card">
         <h3>Built for agents<span class="tag">tooling</span></h3>
-        <p><code>make verify</code> compiles, tests and renders every scene headlessly to PNGs — an agent can confirm its own visual work.</p>
+        <p><code>make verify</code> compiles, runs the test suite and renders every named scene headlessly to PNG — an agent can confirm its own visual work.</p>
       </div>
     </div>
   </section>
 
   <section>
     <h2 class="sec">Drop into any OpenGL loop</h2>
-    <p class="sec-sub">No windowing, no threading, no swap — you keep the loop, aris-ui keeps the pixels.</p>
+    <p class="sec-sub">No windowing, no threading, no swap — you keep the loop, aris-ui draws inside it.</p>
     <div class="quick">
       <div>
         <div class="step"><b>01</b> — build &amp; verify</div>
@@ -160,18 +161,18 @@ ctx.Render();  // host state restored by guard</code></pre>
 
   <section>
     <h2 class="sec">Scenes your agent can look at</h2>
-    <p class="sec-sub">Every UI scene renders headlessly to a PNG — hover states, press states, text ramps, radii.</p>
+    <p class="sec-sub">Every scene renders headlessly to a PNG — overlay HUDs, a mock ClickGUI, hover and press states, text ramps.</p>
     <div class="strip">
-      <figure><img src="assets/buttons-hover.png" alt="buttons with hover state"><figcaption>buttons-hover</figcaption></figure>
-      <figure><img src="assets/sliders.png" alt="sliders at three values"><figcaption>sliders</figcaption></figure>
-      <figure><img src="assets/text.png" alt="MSDF text size ramp"><figcaption>text</figcaption></figure>
-      <figure><img src="assets/card.png" alt="preview cards at different radii"><figcaption>card</figcaption></figure>
+      <figure><img src="assets/hud.png" alt="overlay HUD with arraylist, ESP and nametags"><figcaption>hud</figcaption></figure>
+      <figure><img src="assets/clickgui.png" alt="mock ClickGUI with sidebar and module cards"><figcaption>clickgui</figcaption></figure>
+      <figure><img src="assets/esp.png" alt="2D box ESP with health bars"><figcaption>esp</figcaption></figure>
+      <figure><img src="assets/nametags.png" alt="floating nametags with sub-tags"><figcaption>nametags</figcaption></figure>
     </div>
   </section>
 
   <section>
     <h2 class="sec">Roadmap</h2>
-    <p class="sec-sub">Where the forest grows next (see <a href="https://github.com/OWNER/aris-ui/blob/main/PROGRESS.md">PROGRESS.md</a>).</p>
+    <p class="sec-sub">Next stages (see <a href="https://github.com/OWNER/aris-ui/blob/main/PROGRESS.md">PROGRESS.md</a>).</p>
     <div class="grid">
       <div class="card"><h3>Background blur</h3><p>Dual-Kawase backdrop blur via FBOs, glows, gradient fills, nine-patch images.</p></div>
       <div class="card"><h3>GL 2.1 / 150-core</h3><p>Shader variants with runtime probing for older Minecraft render pipelines.</p></div>
@@ -183,7 +184,7 @@ ctx.Render();  // host state restored by guard</code></pre>
 </main>
 
 <footer class="site">
-  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>aris-ui — MIT licensed.</span>
   <span>C++20 · OpenGL 3.3 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
 </footer>
 </body>

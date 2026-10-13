@@ -71,13 +71,14 @@ criteria; statuses are updated as work completes.
 - **Acceptance:** all 5 MVP deliverables demonstrable in one binary.
 
 ## Stage 8.5 — Agent tooling & docs — `DONE`
-- [x] Headless scene preview tool `examples/scene_preview` → `build/aris_scene_preview`: 8 named scenes (panel, buttons, buttons-hover/press with simulated input, toggles, sliders, text, card) rendered offscreen to PNG, CLI for scene selection/size/warmup
+- [x] Headless scene preview tool `examples/scene_preview` → `build/aris_scene_preview`: 13 named scenes — widget set (panel, buttons/hover/press with simulated input, toggles, sliders, text, card) and mock-game overlays (hud with arraylist/ESP/nametags/hotbar, arraylist, nametags, esp, clickgui with sidebar + module cards), all resolution-independent
 - [x] Shared demo bootstrap `examples/common/AppSupport.hpp` (font discovery, atlas bootstrap, canonical `BuildDemoUi`)
 - [x] Zero-dependency test suite `tests/` (30 tests: math, easing, ids, command queue, widget state store, Yoga layout) wired into CMake/ctest
 - [x] `Makefile`: configure / build / test / preview / demo / docs / verify / clean / help
 - [x] `AGENTS.md`: repo map, verification loop, critical gotchas, conventions
 - [x] Docs generator `tools/gen_docs.py` (stdlib-only md→html) + `docs-src/*.md` (7 pages)
 - [x] Landing page `docs/index.html` + generated `docs/*.html`, `style.css`, `llms.txt`, `llms-full.txt`
+- [x] Theme accent moved from violet to steel blue (`0x7FA8CC`); `✓` added to default atlas charset
 - **Acceptance:** `make verify` = tests pass + previews render; docs site browsable from `docs/index.html`.
 
 ---

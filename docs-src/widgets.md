@@ -64,8 +64,8 @@ Set a custom theme with `ctx.SetTheme(theme)` before the first frame.
 | `panelBg` | `0x15191F` | Panel surface |
 | `panelBorder` | `0x2A3038` | Panel hairline |
 | `text` / `textDim` | `0xE6EDF3` / `0x8B949E` | Primary / secondary text |
-| `accent` | `0x7C5CFF` | Interactive fill (buttons, active toggle, slider fill) |
-| `accentHover` / `accentActive` | `0x9277FF` / `0x6A4CE0` | Hover / pressed accent |
+| `accent` | `0x7FA8CC` | Interactive fill (buttons, active toggle, slider fill) |
+| `accentHover` / `accentActive` | `0x94BBD9` / `0x6A92B7` | Hover / pressed accent |
 | `controlBg`, `controlBorder`, `trackBg` | dark greys | Inactive control surfaces |
 | `panelRadius` / `controlRadius` | 12 / 8 px | Corner radii |
 | `shadowOffset` / `shadowBlur` / `shadowOpacity` | (0,6) / 16 / 0.28 | Panel shadow |

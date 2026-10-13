@@ -12,7 +12,7 @@ struct Params {
     float pxRange = 4.f;        // MSDF distance range in atlas pixels
     int firstCodepoint = 32;    // ASCII printable range by default
     int lastCodepoint = 126;
-    std::string extraChars = "\xC3\x97\xE2\x80\x94";   // UTF-8 extras (×, —)
+    std::string extraChars = "\xC3\x97\xE2\x80\x94\xE2\x9C\x93";   // UTF-8 extras (×, —, ✓)
 };
 
 struct GlyphResult {

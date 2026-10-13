@@ -51,7 +51,8 @@ Binaries land in `build/`: `aris_tests`, `aris_scene_preview`, `aris_runner`,
 1. `make verify` — compiles, runs the test suite, renders all scenes.
 2. **Look at the previews.** `previews/*.png` are real framebuffer dumps of
    named UI scenes (panel, buttons, buttons-hover, buttons-press, toggles,
-   sliders, text, card). If you changed rendering, widgets, or layout, read
+   sliders, text, card, hud, arraylist, nametags, esp, clickgui). If you
+   changed rendering, widgets, or layout, read
    the affected PNG (they are small, 560x720) and confirm it looks right.
 3. Interactive behavior: `make demo` opens a window (needs a display).
 
@@ -73,7 +74,13 @@ Do not claim a rendering change works without having viewed a preview PNG.
   Must happen with a live context; call `Unload()` before `glfwTerminate`.
 - **Scene previews:** each scene gets a fresh `ui::Context`; the harness
   clears the framebuffer every frame. Simulated input is injected *before*
-  `BeginFrame` and eases over `--warmup` frames.
+  `BeginFrame` and eases over `--warmup` frames. Overlay scenes (hud,
+  arraylist, nametags, esp, clickgui) draw with absolute-coordinate
+  `ctx.DrawRect`/`DrawText` — no layout pass — and size off `ctx.size()`, so
+  they render correctly at any `--width/--height`.
+- **Atlas charset:** default glyphs are ASCII 32–126 plus extras (×, —, ✓)
+  declared in `ui_atlas::Params::extraChars`. New non-ASCII glyphs require
+  deleting `atlas/ui.png|json` (the cache) or extending `extraChars`.
 
 ## Conventions
 

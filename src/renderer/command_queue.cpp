@@ -20,10 +20,33 @@ void CommandQueue::PushRect(const Rect& rect, const RectStyle& style) {
     c.shadowSpread = style.shadowSpread;
     c.shadowBlur = style.shadowBlur;
     c.shadowOpacity = style.shadowOpacity;
+    c.shadowColor = style.shadowColor.ToVec4();
+    c.colorEnd = style.fillEnd.ToVec4();
+    c.gradientDir = style.gradientDir;
+}
+
+void CommandQueue::PushLine(Vec2 a, Vec2 b, float thickness, const Color& color) {
+    DrawCommand& c = commands_.emplace_back();
+    c.type = DrawCommand::Type::Line;
+    c.pos = a;
+    c.size = b;
+    c.color = color.ToVec4();
+    c.borderWidth = thickness;
+}
+
+void CommandQueue::PushBackdrop(const Rect& rect, const Vec4& radii, float blurRadius,
+                                const Color& tint) {
+    DrawCommand& c = commands_.emplace_back();
+    c.type = DrawCommand::Type::Backdrop;
+    c.pos = rect.Pos();
+    c.size = rect.Size();
+    c.radii = radii;
+    c.color = tint.ToVec4();
+    c.borderWidth = blurRadius;
 }
 
 void CommandQueue::PushGlyph(const Rect& quad, const float uv[4], const Color& color,
-                             std::uint32_t atlasId, float fontSize) {
+                             std::uint32_t atlasId, float fontSize, float weight) {
     DrawCommand& c = commands_.emplace_back();
     c.type = DrawCommand::Type::Glyph;
     c.pos = quad.Pos();
@@ -32,6 +55,7 @@ void CommandQueue::PushGlyph(const Rect& quad, const float uv[4], const Color& c
     c.u0 = uv[0]; c.v0 = uv[1]; c.u1 = uv[2]; c.v1 = uv[3];
     c.atlasId = atlasId;
     c.fontSize = fontSize;
+    c.borderWidth = weight;   // glyphs reuse borderWidth as embolden (px)
 }
 
 void CommandQueue::PushClip(const Rect& rect) {

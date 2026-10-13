@@ -2,6 +2,7 @@
 // aris-ui — umbrella header
 #include "ui/core/math.hpp"
 #include "ui/core/easing.hpp"
+#include "ui/core/animation.hpp"
 #include "ui/core/event.hpp"
 #include "ui/core/id.hpp"
 #include "ui/core/theme.hpp"
@@ -13,3 +14,5 @@
 #include "ui/renderer/gl_state_guard.hpp"
 #include "ui/font/font_atlas.hpp"
 #include "ui/widgets/widgets.hpp"
+#include "ui/widgets/icons.hpp"
+#include "ui/widgets/kit.hpp"

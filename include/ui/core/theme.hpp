@@ -5,33 +5,35 @@
 namespace ui {
 
 struct Theme {
-    // --- palette ---
-    Color panelBg       = Color::Hex(0x15191F);   // panel surface
-    Color panelBorder   = Color::Hex(0x2A3038);
-    Color panelTitle    = Color::Hex(0xE6EDF3);
+    // --- palette (Aurora: violet glass) ---
+    Color panelBg       = Color::Hex(0x1A0F2E, 205);   // translucent surface (blur shows through)
+    Color panelBorder   = Color(255, 255, 255, 28);
+    Color panelTitle    = Color::Hex(0xF4F0FF);
 
-    Color text          = Color::Hex(0xE6EDF3);
-    Color textDim       = Color::Hex(0x8B949E);
-    Color textOnAccent  = Color::Hex(0x0B0F14);   // dark text on the light accent
+    Color text          = Color::Hex(0xF4F0FF);
+    Color textDim       = Color::Hex(0x9A90B8);
+    Color textOnAccent  = Color::Hex(0xFFFFFF);
 
-    Color accent        = Color::Hex(0x7FA8CC);   // steel blue accent
-    Color accentHover   = Color::Hex(0x94BBD9);
-    Color accentActive  = Color::Hex(0x6A92B7);
+    Color accent        = Color::Hex(0xA45CFF);        // violet accent
+    Color accentHover   = Color::Hex(0xB77DFF);
+    Color accentActive  = Color::Hex(0x7B3FF2);        // also the gradient end
 
-    Color controlBg     = Color::Hex(0x232830);   // inactive control surface
-    Color controlBgHover= Color::Hex(0x2C323C);
-    Color controlBorder = Color::Hex(0x30363D);
-    Color trackBg       = Color::Hex(0x30363D);   // toggle track / slider track
+    Color controlBg     = Color(255, 255, 255, 14);    // inactive control surface
+    Color controlBgHover= Color(255, 255, 255, 24);
+    Color controlBorder = Color(255, 255, 255, 30);
+    Color trackBg       = Color(255, 255, 255, 30);    // toggle track / slider track
 
     // --- metrics ---
-    float panelRadius   = 12.f;
-    float controlRadius = 8.f;
+    float panelRadius   = 18.f;
+    float controlRadius = 10.f;
     float smallRadius   = 6.f;
     float borderWidth   = 1.f;
+    float panelBlur     = 26.f;   // backdrop blur behind panels (px, 0 = off)
 
-    Vec2  shadowOffset  = Vec2(0.f, 6.f);
-    float shadowBlur    = 16.f;
-    float shadowOpacity = 0.28f;
+    Vec2  shadowOffset  = Vec2(0.f, 18.f);
+    float shadowBlur    = 40.f;
+    float shadowOpacity = 0.5f;
+
 
     float fontSize      = 15.f;   // default text size in UI px
     float rowGap        = 10.f;   // vertical gap between widgets

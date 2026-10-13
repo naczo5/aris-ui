@@ -34,6 +34,9 @@ test: build
 preview: build
 	./$(BUILD)/aris_scene_preview --all --out previews
 
+anim: build
+	./$(BUILD)/aris_scene_preview --anim animation --gif --frames 60 --fps 60 --out previews
+
 demo: build
 	./$(BUILD)/aris_runner
 

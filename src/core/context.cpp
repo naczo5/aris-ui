@@ -61,6 +61,7 @@ PanelStyle PanelStyle::FromTheme(const Theme& th, float padding, const char* tit
     s.shadowSpread = 0.f;
     s.shadowBlur = th.shadowBlur;
     s.shadowOpacity = th.shadowOpacity;
+    s.backdropBlur = th.panelBlur;
     s.padding = padding;
     s.title = title;
     s.titleSize = th.fontSize + 3.f;
@@ -101,6 +102,7 @@ void Context::BeginFrame(float dt, float width, float height, float scale) {
     // Roll registries: rects computed last frame drive input & drawing this frame.
     prevRects_ = std::move(curRects_);
     curRects_.clear();
+    overlayRects_.clear();
     rectById_.clear();
     for (const auto& e : prevRects_) rectById_[e.id] = e.rect;
 
@@ -176,7 +178,7 @@ void Context::BeginPanel(const char* label, const Rect& rect, const PanelStyle& 
     root.SetPadding(YGEdgeTop, style.padding);
     if (style.title) {
         const float titleSize = style.titleSize > 0 ? style.titleSize : theme_.fontSize + 3.f;
-        root.SetPadding(YGEdgeTop, style.padding + titleSize * 1.35f);
+        root.SetPadding(YGEdgeTop, style.padding + titleSize + 14.f);
     }
     panel->root.ResetFrame(false);
 
@@ -186,6 +188,8 @@ void Context::BeginPanel(const char* label, const Rect& rect, const PanelStyle& 
 
     // Draw the panel surface immediately (the rect is caller-provided, so no
     // one-frame latency is needed).
+    if (style.backdropBlur > 0.f)
+        DrawBackdropBlur(rect, style.cornerRadii, style.backdropBlur, Color(18, 8, 36, 40));
     RectStyle st;
     st.fill = style.bg;
     st.borderColor = style.border;
@@ -199,7 +203,7 @@ void Context::BeginPanel(const char* label, const Rect& rect, const PanelStyle& 
 
     if (style.title) {
         const float titleSize = style.titleSize > 0 ? style.titleSize : theme_.fontSize + 3.f;
-        Rect clip = rect.Inset(style.padding * 0.5f);
+        Rect clip(rect.x + style.padding * 0.5f, rect.y + 2.f, rect.w - style.padding, titleSize * 2.5f);
         DrawText(Vec2(rect.x + style.padding, rect.y + style.padding), style.title,
                  theme_.panelTitle, titleSize, &clip);
     }
@@ -286,8 +290,51 @@ void Context::DrawRect(const Rect& rect, const RectStyle& style) {
     queue_.PushRect(rect, style);
 }
 
+void Context::DrawLine(Vec2 a, Vec2 b, float thickness, const Color& color) {
+    queue_.PushLine(a, b, thickness, color);
+}
+
+void Context::DrawCircle(Vec2 c, float radius, const Color& color, float stroke) {
+    RectStyle st;
+    st.cornerRadii = Vec4(radius);
+    if (stroke > 0.f) {
+        st.fill = Color::Transparent();
+        st.borderColor = color;
+        st.borderWidth = stroke;
+    } else {
+        st.fill = color;
+    }
+    queue_.PushRect(Rect(c.x - radius, c.y - radius, radius * 2.f, radius * 2.f), st);
+}
+
+void Context::DrawBackdropBlur(const Rect& rect, const Vec4& radii, float blurRadius,
+                               const Color& tint) {
+    queue_.PushBackdrop(rect, radii, blurRadius, tint);
+}
+
+WidgetFrame Context::Interact(const char* label, const Rect& rect) {
+    const WidgetId id = MakeId(label);
+    overlayRects_.push_back({id, rect});
+
+    WidgetState& st = states_.Get(id, frame_);
+    const bool hot = hotId_ == id;
+    const bool active = activeId_ == id;
+    st.hoverT = ExpSmooth(st.hoverT, hot ? 1.f : 0.f, dt_, 14.f);
+    st.pressT = ExpSmooth(st.pressT, active ? 1.f : 0.f, dt_, 22.f);
+
+    WidgetFrame w;
+    w.id = id;
+    w.rect = rect;
+    w.hot = hot;
+    w.active = active;
+    w.clicked = clickedId_ == id;
+    w.dt = dt_;
+    w.state = &st;
+    return w;
+}
+
 void Context::DrawText(Vec2 pos, std::string_view text, const Color& color, float fontSize,
-                       const Rect* clipRect) {
+                       const Rect* clipRect, float weight) {
     if (!font_ || text.empty()) return;
     if (fontSize <= 0.f) fontSize = theme_.fontSize;
 
@@ -323,7 +370,18 @@ void Context::DrawText(Vec2 pos, std::string_view text, const Color& color, floa
             }
             if (visible) {
                 const float guv[4] = {g->u0, g->v0, g->u1, g->v1};
-                queue_.PushGlyph(quad, guv, color, font_->TextureId(), fontSize);
+                if (weight > 0.f) {
+                    // Faux bold: stamp the glyph twice, half a weight apart.
+                    // (Shifting the SDF threshold instead exposes MSDF
+                    // channel artifacts, so only thinning uses the shader.)
+                    Rect a = quad, b = quad;
+                    a.x -= weight * 0.5f;
+                    b.x += weight * 0.5f;
+                    queue_.PushGlyph(a, guv, color, font_->TextureId(), fontSize, 0.f);
+                    queue_.PushGlyph(b, guv, color, font_->TextureId(), fontSize, 0.f);
+                } else {
+                    queue_.PushGlyph(quad, guv, color, font_->TextureId(), fontSize, weight);
+                }
             }
         }
         penX += g->advance * fontSize;
@@ -364,6 +422,8 @@ void Context::RunLayoutAndCollectRects() {
         curRects_.push_back({p->id, p->rect});
         CollectContainerRects(p->root, p->rect.Pos());
     }
+    // Hand-placed regions are hit-tested above everything laid out by Yoga.
+    curRects_.insert(curRects_.end(), overlayRects_.begin(), overlayRects_.end());
 }
 
 void Context::CollectContainerRects(Container& container, Vec2 basePos) {
@@ -420,6 +480,9 @@ void Context::Render() {
 WidgetId Context::HitTest(Vec2 pos) const {
     // Reverse scan: the last registered rect is drawn last, so it is on top.
     for (auto it = prevRects_.rbegin(); it != prevRects_.rend(); ++it) {
+        if (it->rect.Contains(pos) && it->id != kInvalidId) return it->id;
+    }
+    for (auto it = curRects_.rbegin(); it != curRects_.rend(); ++it) {
         if (it->rect.Contains(pos) && it->id != kInvalidId) return it->id;
     }
     return kInvalidId;

@@ -38,12 +38,29 @@ private:
         float params[4];       // borderWidth, shadowSpread, shadowBlur, isGlyph
         float shadow[4];       // offsetX, offsetY, shadowOpacity, pad
         float uv[4];           // glyph uv rect (0 when unused)
+        std::uint8_t color2[4];       // gradient end color
+        std::uint8_t shadowColor[4];
+        float extra[4];        // gradientDir.xy, unused
     };
 
     void Flush(std::uint32_t atlasId, float fontSize, float atlasPxRange,
                float atlasGenSize, std::uint32_t atlasTex, float framebufferHeight);
     void ApplyScissor(const Rect* clipStack, int depth, float framebufferHeight);
     void PushQuad(const UiVertex& proto);
+
+    // --- backdrop blur (frosted glass) ---
+    bool EnsureBackdropPipeline();
+    void EnsureBlurTextures(int w, int h);
+    void DrawBackdrop(const DrawCommand& cmd, const Rect* clipStack, int clipDepth,
+                      float framebufferWidth, float framebufferHeight);
+
+    unsigned int blurBlurProgram_ = 0;   // separable gaussian
+    unsigned int blurCompProgram_ = 0;   // masked composite into the host framebuffer
+    unsigned int blurVao_ = 0;           // attribute-less VAO for gl_VertexID quads
+    unsigned int blurFbo_[2] = {0, 0};
+    unsigned int blurTex_[3] = {0, 0, 0};   // 0: full-res capture, 1/2: half-res ping-pong
+    int capW_ = 0, capH_ = 0;               // capacity of blurTex_[0]
+    bool blurReady_ = false, blurFailed_ = false;
 
     unsigned int program_ = 0;
     unsigned int vao_ = 0;

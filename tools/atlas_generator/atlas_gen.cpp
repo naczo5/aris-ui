@@ -274,7 +274,13 @@ bool GenerateAndWrite(const std::string& fontPath, const std::string& outPrefix,
     const auto pngTime = fs::last_write_time(pngPath, ec);
     if (!ec && pngTime >= fontTime) {
         std::ifstream jsonFile(jsonPath);
-        if (jsonFile.good()) return true;   // cached
+        if (jsonFile.good()) {
+            // Cached only if it was built from this exact font file.
+            std::stringstream ss;
+            ss << jsonFile.rdbuf();
+            if (ss.str().find("\"font\": \"" + fontPath + "\"") != std::string::npos)
+                return true;   // cached
+        }
     }
     return WriteFiles(fontPath, outPrefix, params, error);
 }

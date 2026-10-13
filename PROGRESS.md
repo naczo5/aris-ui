@@ -83,9 +83,21 @@ criteria; statuses are updated as work completes.
 
 ---
 
-## Stage 9+ — Roadmap (pending)
-- [ ] **Stage 9 — Visual effects:** dual-Kawase background blur via FBOs, glows, gradient fills, images/nine-patch
-- [ ] **Stage 10 — Multi-version GL:** `#version 150 core` + GL 2.1 compatibility shader variants with runtime probe; explicit VAO fallback for GL≤2.1
+## Stage 9 — Visual effects & Aurora ClickGUI — `DONE`
+- [x] Linear gradient fills (`fillEnd`, `gradientDir`) on `RectStyle` evaluated inside SDF fragment shader
+- [x] Tinted drop shadows and glow effects (`shadowColor`) with proper premultiplied alpha
+- [x] True frosted-glass backdrop blur (`DrawBackdropBlur`, dual separable Gaussian downsample/upsample passes via FBOs, rounded-rect alpha composite)
+- [x] Anti-aliased round-capped line segment primitive (`DrawCommand::Type::Line`, `Context::DrawLine`)
+- [x] Anti-aliased circle primitive (`DrawCommand::Type::Circle`, `Context::DrawCircle`)
+- [x] Faux-weight MSDF text emboldening (`weight` parameter on `Context::DrawText`)
+- [x] Resolution-independent vector icons (`ui::Icon`, `ui::DrawIcon`: Combat, Movement, Player, Visuals, Client, Friends, Configs, Hud, Search, GrimCrest, Cursor, etc.)
+- [x] High-level ClickGUI kit components (`ui::kit`: `GlassPanel`, `NavItem`, `ModuleRow`, `IconButton`, `SectionTitle`, `Avatar`)
+- [x] Flagship Grim Client-style "Aurora" glass ClickGUI scene (`previews/clickgui.png`) showcasing frosted glass, glowing active pill, crisp typography, and Minecraft backdrop
+- **Acceptance:** `make verify` produces pixel-perfect Grim Client-quality glass ClickGUI preview and upgraded component scenes.
+
+---
+
+## Stage 10+ — Roadmap (pending)
 - [ ] **Stage 11 — Input backends:** Win32 `WndProc` adapter, standalone GLFW adapter module; cursor grab/ungrab controller (LWJGL2 + GLFW modes)
 - [ ] **Stage 12 — Minecraft helper layer:** GUI-scale synchronization (1x–4x/Auto), swapbuffer hook examples (`wglSwapBuffers`, `glXSwapBuffers`/`eglSwapBuffers`), minimal injected DLL example
 - [ ] **Stage 13 — Text v2:** kerning/shaping (HarfBuzz optional), glyph cache with runtime re-raster, font fallbacks

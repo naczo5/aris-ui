@@ -16,6 +16,9 @@ namespace aris_demo {
 inline std::string FindSystemFont() {
     namespace fs = std::filesystem;
     const char* candidates[] = {
+        "/usr/share/fonts/noto/NotoSans-Medium.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Medium.ttf",
+        "/usr/share/fonts/TTF/Inter-Medium.ttf",
         "/usr/share/fonts/TTF/DejaVuSans.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -50,6 +53,8 @@ struct DemoState {
     float opacity = 0.85f;
     float radius = 18.f;
     float shadow = 0.45f;
+    float time = 0.f;
+    int frame = 0;
 };
 
 // The canonical two-column demo panel exercising every MVP deliverable:
@@ -59,7 +64,7 @@ inline void BuildDemoUi(ui::Context& ctx, DemoState& st) {
     const ui::PanelStyle panelStyle =
         ui::PanelStyle::FromTheme(th, 18.f, "ARIS UI — SDF panel");
 
-    ctx.BeginPanel("main", ui::Rect(28, 28, 470, 640), panelStyle);
+    ctx.BeginPanel("main", ui::Rect(28, 28, 470, 480), panelStyle);
 
     ui::Label(ctx, "Modern game overlay toolkit", th.textDim, 13.f);
 
@@ -89,22 +94,28 @@ inline void BuildDemoUi(ui::Context& ctx, DemoState& st) {
             const ui::Rect inner = w.rect.Inset(2.f);
             // card with live-driven SDF parameters
             ui::RectStyle st2;
-            st2.fill = ui::Color::Hex(0x1C2128, (std::uint8_t)(st.opacity * 255.f));
+            st2.fill = ui::Color::Hex(0x23143E, (std::uint8_t)(st.opacity * 255.f));
+            st2.fillEnd = ui::Color::Hex(0x180D2C, (std::uint8_t)(st.opacity * 255.f));
+            st2.gradientDir = ui::Vec2(0.f, 1.f);
             st2.cornerRadii = ui::Vec4(st.radius);
             st2.borderColor = th.controlBorder;
             st2.borderWidth = 1.f;
+            st2.shadowColor = th.accent;
             st2.shadowOffset = ui::Vec2(0.f, 10.f);
             st2.shadowBlur = 24.f;
-            st2.shadowOpacity = st.shadow;
+            st2.shadowOpacity = st.shadow * 0.5f;
             ctx.DrawRect(inner, st2);
 
             // accent pill inside the card
             ui::RectStyle pill;
             pill.fill = th.accent;
+            pill.fillEnd = th.accentHover;
+            pill.gradientDir = ui::Vec2(1.f, 0.f);
             pill.cornerRadii = ui::Vec4(12.f);
+            pill.shadowColor = th.accent;
             pill.shadowOffset = ui::Vec2(0.f, 4.f);
             pill.shadowBlur = 12.f;
-            pill.shadowOpacity = 0.35f * st.shadow;
+            pill.shadowOpacity = 0.45f * st.shadow;
             ctx.DrawRect(ui::Rect(inner.x + 14.f, inner.y + 16.f, 120.f, 24.f), pill);
 
             const char* line = "Rounded rect rendered";

@@ -39,6 +39,8 @@ add_library(aris-ui STATIC
     src/renderer/gl_state_guard.cpp
     src/font/font_atlas.cpp
     src/widgets/widgets.cpp
+    src/widgets/icons.cpp
+    src/widgets/kit.cpp
 )
 target_include_directories(aris-ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(aris-ui

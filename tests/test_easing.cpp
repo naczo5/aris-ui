@@ -1,6 +1,7 @@
 // aris-ui tests — easing / interpolation.
 #include "test_main.hpp"
 #include "ui/core/easing.hpp"
+#include "ui/core/animation.hpp"
 
 using namespace ui;
 
@@ -57,4 +58,25 @@ TEST(cubic_bezier_matches_css_reference) {
     CHECK_NEAR(CubicBezierEase(0.f, Vec2(0.25f, 0.1f), Vec2(0.25f, 1.f)), 0.f, 1e-4);
     CHECK_NEAR(CubicBezierEase(1.f, Vec2(0.25f, 0.1f), Vec2(0.25f, 1.f)), 1.f, 1e-4);
     CHECK_NEAR(CubicBezierEase(0.5f, Vec2(0.5f, 0.5f), Vec2(0.5f, 0.5f)), 0.5f, 1e-4);
+}
+
+TEST(animation_elastic_and_bounce) {
+    CHECK_NEAR(EaseOutBounce(0.f), 0.f, 1e-5);
+    CHECK_NEAR(EaseOutBounce(1.f), 1.f, 1e-5);
+    CHECK_NEAR(EaseOutElastic(0.f), 0.f, 1e-5);
+    CHECK_NEAR(EaseOutElastic(1.f), 1.f, 1e-5);
+    // Elastic should overshoot 1.0
+    float maxEl = 0.f;
+    for (int i = 0; i <= 100; ++i) maxEl = std::max(maxEl, EaseOutElastic(i / 100.f));
+    CHECK(maxEl > 1.05f);
+}
+
+TEST(spring_physics_convergence) {
+    Spring s(0.f, SpringConfig::Bouncy());
+    s.SetTarget(100.f);
+    for (int i = 0; i < 120; ++i) {
+        s.Update(1.f / 60.f);
+    }
+    CHECK_NEAR(s.value, 100.f, 0.05f);
+    CHECK(s.Settled(0.1f));
 }

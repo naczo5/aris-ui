@@ -3,189 +3,777 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>aris-ui — a more beautiful ImGui replacement, optimised for agents</title>
-<meta name="description" content="aris-ui is a modern C++20 immediate-mode UI toolkit for OpenGL overlays: SDF-rendered widgets, MSDF text, Yoga flexbox, and a headless preview/test toolchain designed for AI coding agents.">
+<title>aris-ui — Modern Immediate-Mode UI Toolkit for OpenGL Overlays</title>
+<meta name="description" content="aris-ui is a modern C++20 immediate-mode UI toolkit for OpenGL overlays: SDF-rendered widgets, MSDF vector text, Yoga flexbox, spring physics, and a headless preview/test toolchain designed for AI coding agents.">
 <link rel="stylesheet" href="style.css">
 <style>
-  /* landing-only layout */
-  .hero { padding: 84px 0 56px; max-width: 820px; }
-  .kicker {
-    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--accent); margin-bottom: 22px;
+  /* Landing page styling */
+  main.site {
+    padding-top: 16px;
   }
-  .kicker::before { content: "▮ "; color: var(--accent-soft); }
-  .hero h1 {
-    font-size: clamp(2.1em, 5vw, 3.3em); line-height: 1.12; margin: 0 0 20px;
-    letter-spacing: -0.02em; font-weight: 700;
+  section.hero-wrap {
+    margin-top: 0;
+    margin-bottom: 40px;
+    padding: 16px 0 24px;
+    text-align: center;
+    position: relative;
   }
-  .hero h1 em { font-style: normal; color: var(--accent-soft); }
-  .hero p.lead { font-size: 1.13em; color: var(--dim); max-width: 620px; margin: 0 0 30px; }
-  .cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 46px; }
+  .hero-glow {
+    position: absolute;
+    top: -80px; left: 50%;
+    transform: translateX(-50%);
+    width: 850px; height: 500px;
+    background: radial-gradient(ellipse 55% 45% at 50% 50%, rgba(56, 189, 248, 0.16) 0%, rgba(168, 85, 247, 0.08) 35%, transparent 70%);
+    pointer-events: none;
+    z-index: -1;
+  }
+  .badge-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 16px; border-radius: 999px;
+    background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.28);
+    color: var(--accent-soft); font-family: var(--mono); font-size: 12.5px;
+    margin-bottom: 24px; letter-spacing: 0.05em; font-weight: 500;
+  }
+  .badge-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px var(--accent);
+  }
+  .hero-wrap h1 {
+    font-size: clamp(2.3em, 5.5vw, 3.6em);
+    line-height: 1.14; margin: 0 auto 22px;
+    letter-spacing: -0.03em; font-weight: 800;
+    max-width: 900px;
+  }
+  .gradient-text {
+    background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero-wrap p.lead {
+    font-size: 1.18em; line-height: 1.65;
+    color: var(--dim); max-width: 740px; margin: 0 auto 36px;
+  }
+  .cta-row {
+    display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px;
+  }
   .btn {
-    font-size: 15px; padding: 11px 22px; border-radius: 9px;
-    border: 1px solid var(--line); color: var(--text);
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 15px; font-weight: 600; padding: 12px 24px; border-radius: 10px;
+    border: 1px solid var(--line); color: var(--text); background: var(--panel);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .btn:hover { text-decoration: none; border-color: var(--accent); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #0b0f14; font-weight: 600; }
-  .btn.primary:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
-  .btn code { background: none; border: none; padding: 0; }
+  .btn:hover {
+    border-color: var(--line-strong); transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3); text-decoration: none;
+  }
+  .btn.primary {
+    background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+    border-color: #38bdf8; color: #040810; font-weight: 700;
+    box-shadow: 0 4px 20px rgba(56, 189, 248, 0.35);
+  }
+  .btn.primary:hover {
+    background: linear-gradient(135deg, #38bdf8 0%, #7dd3fc 100%);
+    box-shadow: 0 6px 28px rgba(56, 189, 248, 0.55);
+  }
+  .btn code { background: rgba(0,0,0,0.3); border: none; padding: 2px 6px; color: inherit; }
 
-  .shot {
-    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
-    background: var(--bg2); box-shadow: 0 22px 60px rgba(0,0,0,0.45);
+  /* Section headers */
+  section { margin: 88px 0; }
+  .sec-header { text-align: center; margin-bottom: 44px; }
+  .sec-tag {
+    font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--accent); margin-bottom: 8px; font-weight: 600;
   }
-  .shot img { display: block; width: 100%; height: auto; }
-  .shot figcaption {
-    font-family: var(--mono); font-size: 12px; color: var(--dim);
-    padding: 10px 16px; border-top: 1px solid var(--line);
+  h2.sec-title {
+    font-size: 2.1em; margin: 0 0 12px; border: none; padding: 0;
   }
-  .shot figcaption b { color: var(--accent); font-weight: 500; }
+  p.sec-sub {
+    color: var(--dim); font-size: 1.1em; max-width: 680px; margin: 0 auto;
+  }
 
-  section { margin: 72px 0; }
-  h2.sec {
-    font-size: 1.45em; margin: 0 0 6px; padding: 0; border: none;
+  /* Gallery Grid */
+  .gallery-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    gap: 22px;
   }
-  p.sec-sub { color: var(--dim); margin: 0 0 26px; }
+  .gallery-card {
+    background: var(--bg2); border: 1px solid var(--line);
+    border-radius: 14px; overflow: hidden;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex; flex-direction: column;
+  }
+  .gallery-card:hover {
+    border-color: rgba(56, 189, 248, 0.4);
+    transform: translateY(-4px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.5), 0 0 30px rgba(56, 189, 248, 0.1);
+  }
+  .gallery-img-box {
+    background: #05080e; overflow: hidden; border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+  .gallery-img-box img {
+    display: block; width: 100%; height: auto;
+    transition: transform 0.3s ease;
+  }
+  .gallery-card:hover .gallery-img-box img {
+    transform: scale(1.02);
+  }
+  .gallery-info {
+    padding: 18px 20px; flex-grow: 1; display: flex; flex-direction: column;
+  }
+  .gallery-badge {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    padding: 2px 8px; border-radius: 4px; margin-bottom: 8px;
+    text-transform: uppercase; font-weight: 600;
+  }
+  .badge-cyber { background: rgba(0, 242, 254, 0.15); color: #00f2fe; border: 1px solid rgba(0, 242, 254, 0.3); }
+  .badge-glass { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+  .badge-studio { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+  .badge-nordic { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+  .badge-scifi { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3); }
+  .badge-physics { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+  .badge-font { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+  .badge-tactical { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
+  .badge-swiss { background: rgba(234, 179, 8, 0.18); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4); }
+  .badge-apple { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; }
-  .card {
+  /* Zoom hint on hover */
+  .gallery-card { cursor: pointer; position: relative; }
+  .zoom-hint {
+    position: absolute; bottom: 10px; right: 10px;
+    background: rgba(7, 10, 16, 0.85); border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--accent-soft); font-family: var(--mono); font-size: 11px;
+    padding: 4px 10px; border-radius: 6px; pointer-events: none;
+    opacity: 0; transform: translateY(4px); transition: all 0.2s ease;
+    backdrop-filter: blur(8px); display: flex; align-items: center; gap: 5px; font-weight: 500;
+  }
+  .gallery-card:hover .zoom-hint {
+    opacity: 1; transform: translateY(0);
+  }
+
+  /* Interactive Lightbox Modal */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .lightbox.active {
+    opacity: 1; pointer-events: auto;
+  }
+  .lightbox-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(4, 7, 12, 0.88);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  }
+  .lightbox-content {
+    position: relative; z-index: 10;
+    max-width: 1040px; width: 100%; max-height: 92vh;
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--line-strong);
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 30px 90px rgba(0,0,0,0.85), 0 0 50px rgba(56, 189, 248, 0.15);
+    transform: scale(0.96); transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .lightbox.active .lightbox-content {
+    transform: scale(1);
+  }
+  .lightbox-close {
+    position: absolute; top: 14px; right: 16px; z-index: 20;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(13, 18, 28, 0.85); border: 1px solid var(--line-strong);
+    color: #fff; font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .lightbox-close:hover {
+    background: var(--accent); color: #000; transform: rotate(90deg);
+  }
+  .lightbox-nav {
+    position: absolute; top: 40%; z-index: 20;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(13, 18, 28, 0.85); border: 1px solid var(--line-strong);
+    color: #fff; font-size: 24px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .lightbox-nav:hover {
+    background: var(--accent); color: #000;
+  }
+  .lightbox-nav.prev { left: 16px; }
+  .lightbox-nav.next { right: 16px; }
+  .lightbox-img-wrap {
+    background: #03060a; display: flex; align-items: center; justify-content: center;
+    max-height: 64vh; overflow: hidden; border-bottom: 1px solid var(--line);
+    padding: 16px;
+  }
+  .lightbox-img-wrap img {
+    max-width: 100%; max-height: 60vh; object-fit: contain;
+    border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  .lightbox-meta {
+    padding: 18px 24px; background: var(--bg2);
+  }
+  .lightbox-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 6px;
+  }
+  .lightbox-header h3 { margin: 0; font-size: 1.25em; color: #fff; }
+  .lightbox-desc { color: var(--dim); margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
+  .lightbox-cmd {
+    display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--dimmer);
+  }
+  .lightbox-cmd code {
+    color: var(--accent-soft); background: rgba(56, 189, 248, 0.08); border-color: rgba(56, 189, 248, 0.2);
+  }
+
+  .gallery-info h3 {
+    margin: 0 0 6px; font-size: 1.15em; color: #ffffff;
+  }
+  .gallery-info p {
+    color: var(--dim); font-size: 13.5px; margin: 0; line-height: 1.55;
+  }
+
+  /* Features Grid */
+  .features-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 18px;
+  }
+  .feat-card {
     background: var(--panel); border: 1px solid var(--line);
-    border-radius: 12px; padding: 20px 22px;
+    border-radius: 14px; padding: 24px; transition: all 0.2s ease;
   }
-  .card h3 { margin: 0 0 8px; font-size: 1.02em; }
-  .card h3 .tag {
-    display: inline-block; margin-left: 8px; font-family: var(--mono); font-size: 11px;
-    color: var(--pine); border: 1px solid var(--line); border-radius: 4px;
-    padding: 1px 7px; vertical-align: 2px; background: var(--bg2);
+  .feat-card:hover {
+    border-color: var(--line-strong); background: var(--panel-hover);
+    transform: translateY(-2px);
   }
-  .card p { color: var(--dim); font-size: 14.5px; margin: 0; }
-
-  .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
-  .strip figure { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg2); }
-  .strip img { display: block; width: 100%; height: auto; }
-  .strip figcaption {
-    font-family: var(--mono); font-size: 11.5px; color: var(--dim);
-    padding: 8px 12px; border-top: 1px solid var(--line);
+  .feat-icon {
+    font-size: 26px; margin-bottom: 14px; display: inline-block;
+  }
+  .feat-card h3 {
+    margin: 0 0 10px; font-size: 1.18em; color: #ffffff;
+  }
+  .feat-card p {
+    color: var(--dim); font-size: 14.5px; margin: 0; line-height: 1.6;
   }
 
-  .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
-  @media (max-width: 780px) { .quick { grid-template-columns: 1fr; } }
-  .quick .step { font-size: 13px; color: var(--dim); font-family: var(--mono); margin-bottom: 8px; }
-  .quick .step b { color: var(--accent); font-weight: 600; }
+  /* Quick Code Comparison */
+  .quick-wrap {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    align-items: stretch;
+  }
+  @media (max-width: 820px) { .quick-wrap { grid-template-columns: 1fr; } }
+  .code-col {
+    background: var(--bg2); border: 1px solid var(--line);
+    border-radius: 14px; padding: 20px 24px; display: flex; flex-direction: column;
+  }
+  .code-col-title {
+    font-family: var(--mono); font-size: 13px; color: var(--accent);
+    margin-bottom: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+  }
+  .code-col pre {
+    margin: 0; padding: 0; background: none; border: none; box-shadow: none; flex-grow: 1;
+  }
+
+  /* Comparison Matrix */
+  .matrix-wrap {
+    overflow-x: auto;
+  }
+  .matrix-wrap table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  }
+  .matrix-wrap th, .matrix-wrap td {
+    padding: 14px 18px; text-align: left; border-bottom: 1px solid var(--line);
+  }
+  .matrix-wrap tr:last-child td { border-bottom: none; }
+  .matrix-wrap th { background: var(--bg2); font-weight: 600; color: #ffffff; }
+  .matrix-wrap td b { color: var(--accent-soft); }
 </style>
 </head>
 <body>
 <header class="site">
   <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
   <nav>
-    <a href="getting-started.html">Docs</a>
+    <a href="getting-started.html">Getting Started</a>
     <a href="widgets.html">Widgets</a>
+    <a href="layout.html">Layout</a>
+    <a href="core-concepts.html">Architecture</a>
     <a href="agent-tooling.html">For Agents</a>
-    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+    <a href="https://github.com/naczo5/aris-ui" target="_blank" rel="noopener">GitHub ↗</a>
   </nav>
 </header>
 
 <main class="site">
 
-  <section class="hero">
-    <div class="kicker">C++20 · OpenGL 3.3 · MIT</div>
-    <h1>A more beautiful <em>ImGui</em> replacement.<br>Optimised for agents.</h1>
+  <!-- Hero Section -->
+  <section class="hero-wrap">
+    <div class="hero-glow"></div>
+    <div class="badge-tag">
+      <span class="badge-dot"></span>
+      C++20 · OpenGL 3.3 · MIT Licensed · Agent-Optimized
+    </div>
+    <h1>A More Beautiful Alternative to ImGui.<br><span class="gradient-text">Engineered for Overlays &amp; AI Agents.</span></h1>
     <p class="lead">
-      An immediate-mode UI toolkit for OpenGL overlay injection. Widgets are drawn as
-      analytic signed-distance fields, text comes from offline MSDF atlases, layout is
-      Yoga flexbox — and the whole thing renders headlessly to PNG so a coding agent can
-      build, test and <b>look</b> at its own work.
+      An immediate-mode C++20 UI library built for OpenGL injection and standalone apps.
+      Analytic signed-distance fields, MSDF vector typography, Yoga Flexbox, and spring dynamics —
+      with a 1-second headless verification toolchain that lets AI coding agents build, test, and visually inspect their work.
     </p>
-    <div class="cta">
-      <a class="btn primary" href="getting-started.html">Get started</a>
-      <a class="btn" href="agent-tooling.html"><code>make verify</code>&nbsp;→ tests &amp; PNGs</a>
-    </div>
-    <figure class="shot">
-      <img src="assets/hud-wide.png" alt="Mock game overlay rendered by aris-ui: module arraylist, ESP boxes with health bars, nametags and a hotbar over a night scene" width="1280" height="800">
-      <figcaption><b>aris_scene_preview --scene hud</b> — headless framebuffer dump, not a mockup</figcaption>
-    </figure>
-  </section>
-
-  <section>
-    <h2 class="sec">What you get</h2>
-    <p class="sec-sub">The rendering quality of a hand-written overlay UI, with none of the shader debugging.</p>
-    <div class="grid">
-      <div class="card">
-        <h3>SDF shapes<span class="tag">renderer</span></h3>
-        <p>Rounded rects, borders and soft shadows are analytic signed-distance fields — resolution-independent, antialiased, one draw call for every shape on screen.</p>
-      </div>
-      <div class="card">
-        <h3>MSDF text<span class="tag">fonts</span></h3>
-        <p>Offline multi-channel signed-distance atlases (msdfgen) with em-normalized metrics. One PNG + JSON per font; crisp from 11 px to any DPI.</p>
-      </div>
-      <div class="card">
-        <h3>Flexbox layout<span class="tag">yoga</span></h3>
-        <p>Panels, rows and columns backed by a vendored Yoga tree with an RAII wrapper. Retained between frames, culled when unused.</p>
-      </div>
-      <div class="card">
-        <h3>Host-safe<span class="tag">injection</span></h3>
-        <p>Caller-driven frame loop, no globals, no threads. An RAII guard snapshots and restores the host's entire GL state around the UI pass.</p>
-      </div>
-      <div class="card">
-        <h3>Eased by default<span class="tag">feel</span></h3>
-        <p>Hover, press and value transitions run on frame-rate-independent exponential smoothing. Motion you don't have to write.</p>
-      </div>
-      <div class="card">
-        <h3>Built for agents<span class="tag">tooling</span></h3>
-        <p><code>make verify</code> compiles, runs the test suite and renders every named scene headlessly to PNG — an agent can confirm its own visual work.</p>
-      </div>
+    <div class="cta-row">
+      <a class="btn primary" href="getting-started.html">Get Started Now →</a>
+      <a class="btn" href="#gallery">Visual Style Gallery ↓</a>
+      <a class="btn" href="agent-tooling.html"><code>make verify</code> Pipeline</a>
     </div>
   </section>
 
-  <section>
-    <h2 class="sec">Drop into any OpenGL loop</h2>
-    <p class="sec-sub">No windowing, no threading, no swap — you keep the loop, aris-ui draws inside it.</p>
-    <div class="quick">
-      <div>
-        <div class="step"><b>01</b> — build &amp; verify</div>
-        <pre><code>git clone &lt;repo&gt; aris-ui &amp;&amp; cd aris-ui
-make configure &amp;&amp; make verify
-# → tests pass, previews/*.png rendered</code></pre>
+  <!-- Showcase Gallery -->
+  <section id="gallery">
+    <div class="sec-header">
+      <div class="sec-tag">Endless Aesthetic Variety</div>
+      <h2 class="sec-title">Tailor Every UI to Your World</h2>
+      <p class="sec-sub">
+        Not just a single theme: aris-ui gives you complete shader-level control over signed-distance geometry, shadows, gradients, and typography.
+      </p>
+    </div>
+
+    <div class="gallery-grid">
+      <!-- 1. Swiss Neo-Brutalist Buttons -->
+      <div class="gallery-card" onclick="openLightbox(0)"
+           data-img="assets/buttons.png"
+           data-title="Architectural Print Actions"
+           data-badge="Neo-Brutalist Swiss"
+           data-badge-class="badge-swiss"
+           data-desc="Stark 2.5px jet-black borders, solid unblurred drop shadows, canary yellow and cobalt action triggers, and tactile press states."
+           data-cmd="./build/aris_scene_preview --scene buttons">
+        <div class="gallery-img-box">
+          <img src="assets/buttons.png" alt="Neo-Brutalist Swiss editorial buttons with sharp borders, solid offset drop shadows, and high contrast typography">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-swiss">Neo-Brutalist Swiss</span>
+          <h3>Architectural Print Actions</h3>
+          <p>Stark 2.5px jet-black borders, solid unblurred drop shadows, canary yellow and cobalt action triggers, and tactile press states.</p>
+        </div>
       </div>
-      <div>
-        <div class="step"><b>02</b> — one frame of UI</div>
-        <pre><code>ui::GlStateGuard guard;
-ctx.BeginFrame(dt, w, h);
-ctx.BeginPanel("main", rect, style);
-if (ui::Button(ctx, "Click me")) ++clicks;
+
+      <!-- 2. Aurora Glass ClickGUI -->
+      <div class="gallery-card" onclick="openLightbox(1)"
+           data-img="assets/clickgui.png"
+           data-title="Translucent Overlay ClickGUI"
+           data-badge="Aurora Glass"
+           data-badge-class="badge-glass"
+           data-desc="Multi-category sidebar, search field, active category tabs, user profile badge, and module action cards inspired by Grim Client."
+           data-cmd="./build/aris_scene_preview --scene clickgui">
+        <div class="gallery-img-box">
+          <img src="assets/clickgui.png" alt="Aurora glass ClickGUI preview with translucent backdrop, purple glow, and module cards">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-glass">Aurora Glass</span>
+          <h3>Translucent Overlay ClickGUI</h3>
+          <p>Multi-category sidebar, search field, active category tabs, user profile badge, and module action cards inspired by Grim Client.</p>
+        </div>
+      </div>
+
+      <!-- 3. Pro Analog Console -->
+      <div class="gallery-card" onclick="openLightbox(2)"
+           data-img="assets/sliders.png"
+           data-title="Analog Mastering Rack"
+           data-badge="Studio Pro Console"
+           data-badge-class="badge-studio"
+           data-desc="Dark steel chassis with hex screw rivets, calibrated tick marks, tactile aluminum fader caps, and discrete 14-dot LED VU meters."
+           data-cmd="./build/aris_scene_preview --scene sliders">
+        <div class="gallery-img-box">
+          <img src="assets/sliders.png" alt="Analog mastering console audio rack with calibrated dB tick marks and tactile fader caps">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-studio">Studio Pro Console</span>
+          <h3>Analog Mastering Rack</h3>
+          <p>Dark steel chassis with hex screw rivets, calibrated tick marks, tactile aluminum fader caps, and discrete 14-dot LED VU meters.</p>
+        </div>
+      </div>
+
+      <!-- 4. macOS Sequoia Preferences -->
+      <div class="gallery-card" onclick="openLightbox(3)"
+           data-img="assets/toggles.png"
+           data-title="System &amp; Display Preferences"
+           data-badge="macOS Sequoia"
+           data-badge-class="badge-apple"
+           data-desc="Frosted dark glass card, 3-way segmented control tabs, smooth rounded toggle switches with drop-shadowed knobs."
+           data-cmd="./build/aris_scene_preview --scene toggles">
+        <div class="gallery-img-box">
+          <img src="assets/toggles.png" alt="macOS Sequoia clean frosted glass preferences with segmented control and switches">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-apple">macOS Sequoia</span>
+          <h3>System &amp; Display Preferences</h3>
+          <p>Frosted dark glass card, 3-way segmented control tabs, smooth rounded toggle switches with drop-shadowed knobs.</p>
+        </div>
+      </div>
+
+      <!-- 5. Cyber-Tactical Telemetry Deck -->
+      <div class="gallery-card" onclick="openLightbox(4)"
+           data-img="assets/card.png"
+           data-title="Telemetry &amp; Target Deck"
+           data-badge="Cyber-Tactical"
+           data-badge-class="badge-scifi"
+           data-desc="Corner-bracketed sci-fi unit cards, high-contrast reticle rings, segmented power/signal graphs, and action triggers."
+           data-cmd="./build/aris_scene_preview --scene card">
+        <div class="gallery-img-box">
+          <img src="assets/card.png" alt="Cyber-tactical telemetry HUD deck with targeting reticles, status pills, and bar graphs">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-scifi">Cyber-Tactical</span>
+          <h3>Telemetry &amp; Target Deck</h3>
+          <p>Corner-bracketed sci-fi unit cards, high-contrast reticle rings, segmented power/signal graphs, and action triggers.</p>
+        </div>
+      </div>
+
+      <!-- 6. Physics & Dynamic Oscilloscope -->
+      <div class="gallery-card" onclick="openLightbox(5)"
+           data-img="assets/animation.gif"
+           data-title="Spring Oscillators &amp; Radar"
+           data-badge="60 FPS Dynamics"
+           data-badge-class="badge-physics"
+           data-desc="Second-order harmonic spring physics (Bouncy, Smooth, Snappy), multi-curve interpolation, and continuous pulse radar."
+           data-cmd="./build/aris_scene_preview --anim animation --gif">
+        <div class="gallery-img-box">
+          <img src="assets/animation.gif" alt="Animated GIF of real-time dynamics oscilloscope: spring physics, EaseOut curves, and pulsating radar">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-physics">60 FPS Dynamics</span>
+          <h3>Spring Oscillators &amp; Radar</h3>
+          <p>Second-order harmonic spring physics (Bouncy, Smooth, Snappy), multi-curve interpolation, and continuous pulse radar.</p>
+        </div>
+      </div>
+
+      <!-- 7. Bauhaus MSDF Typography -->
+      <div class="gallery-card" onclick="openLightbox(6)"
+           data-img="assets/text.png"
+           data-title="Bauhaus Type Specimen"
+           data-badge="MSDF Vector Type"
+           data-badge-class="badge-font"
+           data-desc="Multi-channel distance field rendering with infinite DPI zoom fidelity, optical baseline alignment, and single-pass draw calls."
+           data-cmd="./build/aris_scene_preview --scene text">
+        <div class="gallery-img-box">
+          <img src="assets/text.png" alt="Bauhaus typography specimen with precise baseline ladder and technical font metrics banner">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-font">MSDF Vector Type</span>
+          <h3>Bauhaus Type Specimen</h3>
+          <p>Multi-channel distance field rendering with infinite DPI zoom fidelity, optical baseline alignment, and single-pass draw calls.</p>
+        </div>
+      </div>
+
+      <!-- 8. Competitive Client HUD -->
+      <div class="gallery-card" onclick="openLightbox(7)"
+           data-img="assets/hud.png"
+           data-title="In-Game Combat HUD"
+           data-badge="Client HUD"
+           data-badge-class="badge-tactical"
+           data-desc="Absolute-coordinate injection mode: watermark pill, target HUD card, notification alert toast, active potions, and hotbar."
+           data-cmd="./build/aris_scene_preview --scene hud">
+        <div class="gallery-img-box">
+          <img src="assets/hud.png" alt="Competitive client in-game HUD: watermark, target HUD, alert toast, hotbar, and active potions">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-tactical">Client HUD</span>
+          <h3>In-Game Combat HUD</h3>
+          <p>Absolute-coordinate injection mode: watermark pill, target HUD card, notification alert toast, active potions, and hotbar.</p>
+        </div>
+      </div>
+
+      <!-- 9. Descending Arraylist -->
+      <div class="gallery-card" onclick="openLightbox(8)"
+           data-img="assets/arraylist.png"
+           data-title="Descending Module Arraylist"
+           data-badge="Competitive Overlay"
+           data-badge-class="badge-cyber"
+           data-desc="Mathematically sorted module width ladder with color-coded accent bars, active keybinds HUD, and session statistics."
+           data-cmd="./build/aris_scene_preview --scene arraylist">
+        <div class="gallery-img-box">
+          <img src="assets/arraylist.png" alt="Strictly descending competitive module arraylist with active keybinds and session stats">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-cyber">Competitive Overlay</span>
+          <h3>Descending Module Arraylist</h3>
+          <p>Mathematically sorted module width ladder with color-coded accent bars, active keybinds HUD, and session statistics.</p>
+        </div>
+      </div>
+
+      <!-- 10. 3D Perspective Floating Nametags -->
+      <div class="gallery-card" onclick="openLightbox(9)"
+           data-img="assets/nametags.png"
+           data-title="Perspective Nametags &amp; Armor"
+           data-badge="Player Radar"
+           data-badge-class="badge-glass"
+           data-desc="Distance-scaled floating nametags, armor inventory slots with enchantment badges (P4 U3, S5 F2), and radar range rings."
+           data-cmd="./build/aris_scene_preview --scene nametags">
+        <div class="gallery-img-box">
+          <img src="assets/nametags.png" alt="Floating perspective nametags with armor slots, enchantment tags, and health bars">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-glass">Player Radar</span>
+          <h3>Perspective Nametags &amp; Armor</h3>
+          <p>Distance-scaled floating nametags, armor inventory slots with enchantment badges (P4 U3, S5 F2), and radar range rings.</p>
+        </div>
+      </div>
+
+      <!-- 11. 2D Corner-Box ESP & Skeletons -->
+      <div class="gallery-card" onclick="openLightbox(10)"
+           data-img="assets/esp.png"
+           data-title="2D Box ESP &amp; Skeleton Bones"
+           data-badge="Entity ESP"
+           data-badge-class="badge-scifi"
+           data-desc="Corner L-brackets, colored skeleton joints, translucent body mesh backing, vertical health bars, and ground tracer snaplines."
+           data-cmd="./build/aris_scene_preview --scene esp">
+        <div class="gallery-img-box">
+          <img src="assets/esp.png" alt="2D corner-box ESP with skeleton bones, articulation joints, health bars, and tracer snaplines">
+          <div class="zoom-hint"><span>🔍</span> Click to expand</div>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-badge badge-scifi">Entity ESP</span>
+          <h3>2D Box ESP &amp; Skeleton Bones</h3>
+          <p>Corner L-brackets, colored skeleton joints, translucent body mesh backing, vertical health bars, and ground tracer snaplines.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Architectural Features -->
+  <section>
+    <div class="sec-header">
+      <div class="sec-tag">Architecture</div>
+      <h2 class="sec-title">Built for Performance &amp; AI Autonomy</h2>
+      <p class="sec-sub">Designed from the ground up for modern C++20 game overlays and friction-free autonomous AI agent workflows.</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feat-card">
+        <div class="feat-icon">💎</div>
+        <h3>Analytic SDF Geometry</h3>
+        <p>No vertex bloat or messy triangle meshes. Rounded rects, borders, and smooth drop shadows are evaluated analytically in the fragment shader for sub-pixel anti-aliasing.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">🔤</div>
+        <h3>Multi-Channel Signed Distance Fonts</h3>
+        <p>Offline MSDF atlases generated via FreeType and msdfgen. One PNG + JSON atlas per font provides razor-sharp text from 10px micro-HUDs to 4K Ultra HD displays.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">📐</div>
+        <h3>Flexbox Layout via Yoga</h3>
+        <p>Declarative panels, rows, columns, and gutters powered by vendored Yoga flexbox. Retained between frames and automatically culled when unreferenced.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">🌊</div>
+        <h3>Spring Physics &amp; Easing</h3>
+        <p>Built-in second-order harmonic oscillators (<code>ui::Spring</code>), critically-damped smooth transitions, elastic curves, and continuous pulse oscillators.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">🛡️</div>
+        <h3>Host-Safe OpenGL Guard</h3>
+        <p>Caller-driven frame loop with zero background threads. <code>GlStateGuard</code> snapshots and restores the host's entire GL pipeline around the UI render pass.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">🤖</div>
+        <h3>AI Agent Verification Loop</h3>
+        <p>Autonomous AI agents can run <code>make verify</code> to build the codebase, execute unit tests, and render headless PNG framebuffer snapshots into <code>previews/</code> to inspect their changes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quickstart Code -->
+  <section>
+    <div class="sec-header">
+      <div class="sec-tag">Simplicity</div>
+      <h2 class="sec-title">Immediate-Mode Simplicity in Modern C++</h2>
+      <p class="sec-sub">Drop aris-ui directly into your game loop, render hook, or standalone GLFW application.</p>
+    </div>
+
+    <div class="quick-wrap">
+      <div class="code-col">
+        <div class="code-col-title"><span>01</span> — Build &amp; Verify Pipeline</div>
+        <pre><code># First-time configure
+make configure
+
+# One-command agent verification loop:
+# compiles, runs tests, and produces headless PNG snapshots
+make verify
+
+# Launch interactive desktop demo
+make demo</code></pre>
+      </div>
+
+      <div class="code-col">
+        <div class="code-col-title"><span>02</span> — Immediate-Mode Render Loop</div>
+        <pre><code>// Inside your render / swapbuffers hook:
+ui::GlStateGuard guard; // restores GL state automatically
+
+ctx.BeginFrame(deltaTime, screenWidth, screenHeight);
+ctx.BeginPanel("settings", panelRect, panelStyle);
+
+if (ui::Button(ctx, "Overclock Cores")) {
+    TriggerOverclock();
+}
+ui::Toggle(ctx, "Ray Tracing", &rtxEnabled);
+ui::Slider(ctx, "Volume", &masterVolume, 0.f, 1.f);
+
 ctx.EndPanel();
-ctx.Render();  // host state restored by guard</code></pre>
+ctx.Render(); // executes batched SDF draw commands</code></pre>
       </div>
     </div>
   </section>
 
+  <!-- Comparison Matrix -->
   <section>
-    <h2 class="sec">Scenes your agent can look at</h2>
-    <p class="sec-sub">Every scene renders headlessly to a PNG — overlay HUDs, a mock ClickGUI, hover and press states, text ramps.</p>
-    <div class="strip">
-      <figure><img src="assets/hud.png" alt="overlay HUD with arraylist, ESP and nametags"><figcaption>hud</figcaption></figure>
-      <figure><img src="assets/clickgui.png" alt="mock ClickGUI with sidebar and module cards"><figcaption>clickgui</figcaption></figure>
-      <figure><img src="assets/esp.png" alt="2D box ESP with health bars"><figcaption>esp</figcaption></figure>
-      <figure><img src="assets/nametags.png" alt="floating nametags with sub-tags"><figcaption>nametags</figcaption></figure>
+    <div class="sec-header">
+      <div class="sec-tag">Feature Comparison</div>
+      <h2 class="sec-title">Why aris-ui vs Other Toolkits?</h2>
     </div>
-  </section>
 
-  <section>
-    <h2 class="sec">Roadmap</h2>
-    <p class="sec-sub">Next stages (see <a href="https://github.com/OWNER/aris-ui/blob/main/PROGRESS.md">PROGRESS.md</a>).</p>
-    <div class="grid">
-      <div class="card"><h3>Background blur</h3><p>Dual-Kawase backdrop blur via FBOs, glows, gradient fills, nine-patch images.</p></div>
-      <div class="card"><h3>GL 2.1 / 150-core</h3><p>Shader variants with runtime probing for older Minecraft render pipelines.</p></div>
-      <div class="card"><h3>Minecraft layer</h3><p>GUI-scale sync, WndProc/swapbuffer hook adapters, injected-DLL example.</p></div>
-      <div class="card"><h3>Widgets v2</h3><p>Dropdowns, text input, scroll views, tooltips, window manager.</p></div>
+    <div class="matrix-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>aris-ui</th>
+            <th>Dear ImGui</th>
+            <th>NanoVG</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Geometry Rendering</b></td>
+            <td><b>Analytic SDF Fragment Shaders</b></td>
+            <td>Tessellated Vertex Triangles</td>
+            <td>CPU Vector Path Rasterization</td>
+          </tr>
+          <tr>
+            <td><b>Antialiased Shadows &amp; Glows</b></td>
+            <td><b>Built-in SDF Shadows (0 overhead)</b></td>
+            <td>None / Expensive multi-pass blur</td>
+            <td>Basic radial gradients</td>
+          </tr>
+          <tr>
+            <td><b>Typography Quality</b></td>
+            <td><b>MSDF Vector Atlases (infinite zoom)</b></td>
+            <td>Raster Bitmap Atlases (pixelates)</td>
+            <td>TrueType CPU rasterizer</td>
+          </tr>
+          <tr>
+            <td><b>Layout Engine</b></td>
+            <td><b>Yoga Flexbox (Rows, Columns, Gaps)</b></td>
+            <td>Cursor-based manual advance</td>
+            <td>Manual coordinates only</td>
+          </tr>
+          <tr>
+            <td><b>Physics &amp; Transitions</b></td>
+            <td><b>Spring Dynamics &amp; Easing built-in</b></td>
+            <td>Requires third-party extensions</td>
+            <td>None</td>
+          </tr>
+          <tr>
+            <td><b>Headless Agent Testing</b></td>
+            <td><b>Native headless PNG dumps (make verify)</b></td>
+            <td>Requires windowing &amp; display</td>
+            <td>Manual FBO configuration</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
 </main>
 
 <footer class="site">
-  <span>aris-ui — MIT licensed.</span>
-  <span>C++20 · OpenGL 3.3 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+  <span><b>aris-ui</b> — MIT licensed · Modern C++20 · OpenGL 3.3 Overlays</span>
+  <span>Single source of truth: <code>include/ui/aris_ui.hpp</code> · <a href="https://github.com/naczo5/aris-ui" target="_blank" rel="noopener">GitHub Repository ↗</a></span>
 </footer>
+
+<!-- Interactive Lightbox Modal -->
+<div id="lightbox" class="lightbox" aria-hidden="true">
+  <div class="lightbox-backdrop" onclick="closeLightbox()"></div>
+  <div class="lightbox-content">
+    <button class="lightbox-close" onclick="closeLightbox()" title="Close (Esc)">✕</button>
+    <button class="lightbox-nav prev" onclick="navLightbox(-1)" title="Previous (Left arrow)">‹</button>
+    <button class="lightbox-nav next" onclick="navLightbox(1)" title="Next (Right arrow)">›</button>
+    <div class="lightbox-img-wrap">
+      <img id="lightbox-img" src="" alt="Preview detail">
+    </div>
+    <div class="lightbox-meta">
+      <div class="lightbox-header">
+        <span id="lightbox-badge" class="gallery-badge"></span>
+        <h3 id="lightbox-title"></h3>
+      </div>
+      <p id="lightbox-desc"></p>
+      <div class="lightbox-cmd">
+        <span>Render:</span>
+        <code id="lightbox-cmd"></code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const cards = Array.from(document.querySelectorAll('.gallery-card'));
+  let currentIndex = 0;
+
+  function openLightbox(index) {
+    if (index < 0 || index >= cards.length) return;
+    currentIndex = index;
+    const card = cards[currentIndex];
+    const img = document.getElementById('lightbox-img');
+    const badge = document.getElementById('lightbox-badge');
+    const title = document.getElementById('lightbox-title');
+    const desc = document.getElementById('lightbox-desc');
+    const cmd = document.getElementById('lightbox-cmd');
+
+    img.src = card.dataset.img;
+    img.alt = card.dataset.title;
+    badge.textContent = card.dataset.badge;
+    badge.className = 'gallery-badge ' + card.dataset.badgeClass;
+    title.textContent = card.dataset.title;
+    desc.textContent = card.dataset.desc;
+    cmd.textContent = card.dataset.cmd;
+
+    const lb = document.getElementById('lightbox');
+    lb.classList.add('active');
+    lb.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    const lb = document.getElementById('lightbox');
+    if (!lb) return;
+    lb.classList.remove('active');
+    lb.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  function navLightbox(direction) {
+    const newIndex = (currentIndex + direction + cards.length) % cards.length;
+    openLightbox(newIndex);
+  }
+
+  window.addEventListener('keydown', (e) => {
+    const lb = document.getElementById('lightbox');
+    if (!lb || !lb.classList.contains('active')) return;
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowLeft') navLightbox(-1);
+    else if (e.key === 'ArrowRight') navLightbox(1);
+  });
+</script>
 </body>
 </html>

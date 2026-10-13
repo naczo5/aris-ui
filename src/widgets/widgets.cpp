@@ -19,21 +19,29 @@ bool Button(Context& ctx, const char* label) {
     WidgetFrame w = ctx.BeginWidget(label, th.controlHeight);
 
     if (w.rect.Valid()) {
-        Color fill = Blend2(th.accent, th.accentHover, w.state->hoverT,
-                            th.accentActive, w.state->pressT);
+        const float hov = w.state->hoverT, prs = w.state->pressT;
         RectStyle st;
-        st.fill = fill;
+        st.fill = Color::Blend(th.accent, th.accentHover, hov);
+        st.fillEnd = Color::Blend(th.accentActive, th.accent, hov * 0.5f);
+        st.gradientDir = Vec2(0.6f, 1.f);
+        st.fill = Color::Blend(st.fill, th.accentActive, prs * 0.6f);
         st.cornerRadii = Vec4(th.controlRadius);
-        // Hover lifts the button; press settles it back down.
-        st.shadowOffset = Vec2(0.f, Lerp(2.f, 5.f, w.state->hoverT));
-        st.shadowBlur = 12.f;
-        st.shadowOpacity = 0.18f + 0.14f * w.state->hoverT - 0.10f * w.state->pressT;
+        st.borderColor = Color(255, 255, 255, (std::uint8_t)(38 + 40 * hov));
+        st.borderWidth = 1.f;
+        // Hover lifts the button and intensifies the glow; press settles it down.
+        st.shadowColor = th.accent;
+        st.shadowOffset = Vec2(0.f, Lerp(3.f, 6.f, hov) - 3.f * prs);
+        st.shadowBlur = 14.f + 6.f * hov;
+        st.shadowOpacity = 0.30f + 0.30f * hov - 0.20f * prs;
         ctx.DrawRect(w.rect, st);
 
         const float fs = th.fontSize;
         const Vec2 ts = ctx.MeasureText(label, fs);
         const Vec2 c = w.rect.Center();
-        ctx.DrawText(Vec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), label, th.textOnAccent, fs, &w.rect);
+        const float capH = fs * 0.72f;
+        const float textTop = c.y - capH * 0.5f - (fs - capH) * 0.35f;
+        Rect textClip = w.rect.Inset(2.f, 0.f);
+        ctx.DrawText(Vec2(c.x - ts.x * 0.5f, textTop), label, th.textOnAccent, fs, &textClip);
     }
     ctx.EndWidget();
     return w.clicked;
@@ -53,9 +61,10 @@ void Toggle(Context& ctx, const char* label, bool* value) {
     if (w.rect.Valid()) {
         const float fs = th.fontSize;
         const float rowH = th.smallHeight;
-        const Vec2 ts = ctx.MeasureText(label, fs);
-        ctx.DrawText(Vec2(w.rect.x, w.rect.y + (rowH - ts.y) * 0.5f), label,
-                     th.text, fs, &w.rect);
+        const float capH = fs * 0.72f;
+        const float textTop = w.rect.y + (rowH - capH) * 0.5f - (fs - capH) * 0.35f;
+        Rect textClip(w.rect.x, w.rect.y, w.rect.w - 48.f, w.rect.h);
+        ctx.DrawText(Vec2(w.rect.x, textTop), label, th.text, fs, &textClip);
 
         // Track (right aligned pill)
         const float trackW = 40.f;
@@ -64,8 +73,12 @@ void Toggle(Context& ctx, const char* label, bool* value) {
         RectStyle trackSt;
         trackSt.cornerRadii = Vec4(trackH * 0.5f);
         trackSt.fill = Color::Blend(th.trackBg, th.accent, st.valueT);
-        trackSt.borderColor = th.controlBorder;
-        trackSt.borderWidth = 1.f;
+        trackSt.fillEnd = Color::Blend(th.trackBg, th.accentActive, st.valueT);
+        trackSt.gradientDir = Vec2(1.f, 0.f);
+        trackSt.shadowColor = th.accent;
+        trackSt.shadowBlur = 10.f;
+        trackSt.shadowOffset = Vec2(0.f, 2.f);
+        trackSt.shadowOpacity = 0.5f * st.valueT;
         ctx.DrawRect(track, trackSt);
 
         // Knob (slides with eased value)
@@ -76,7 +89,7 @@ void Toggle(Context& ctx, const char* label, bool* value) {
         knobSt.cornerRadii = Vec4(knob * 0.5f);
         knobSt.shadowOffset = Vec2(0.f, 1.f);
         knobSt.shadowBlur = 3.f;
-        knobSt.shadowOpacity = 0.25f;
+        knobSt.shadowOpacity = 0.35f;
         ctx.DrawRect(Rect(x, track.y + 2.f, knob, knob), knobSt);
     }
     ctx.EndWidget();
@@ -115,23 +128,32 @@ void Slider(Context& ctx, const char* label, float* value,
         trackSt.fill = th.trackBg;
         ctx.DrawRect(track, trackSt);
 
-        // Filled portion
+        // Filled portion (gradient + soft glow)
         RectStyle fillSt;
         fillSt.cornerRadii = Vec4(trackH * 0.5f);
-        fillSt.fill = th.accent;
+        fillSt.fill = th.accentActive;
+        fillSt.fillEnd = th.accent;
+        fillSt.gradientDir = Vec2(1.f, 0.f);
+        fillSt.shadowColor = th.accent;
+        fillSt.shadowBlur = 8.f;
+        fillSt.shadowOpacity = 0.45f;
         const float fillW = std::max(track.w * frac, trackH);
         ctx.DrawRect(Rect(track.x, track.y, fillW, track.h), fillSt);
 
-        // Knob
-        const float knob = 16.f;
+        // Knob grows slightly on hover/drag
+        const float grow = std::max(w.state->hoverT * 0.5f, w.active ? 1.f : 0.f);
+        const float knob = 15.f + 3.f * grow;
         const float kx = track.x + track.w * frac - knob * 0.5f;
         const float ky = track.y + track.h * 0.5f - knob * 0.5f;
         RectStyle knobSt;
-        knobSt.fill = w.active ? th.text : Color::White();
+        knobSt.fill = Color::White();
         knobSt.cornerRadii = Vec4(knob * 0.5f);
+        knobSt.borderColor = Color(th.accent.r, th.accent.g, th.accent.b, 140);
+        knobSt.borderWidth = 1.5f;
+        knobSt.shadowColor = th.accent;
         knobSt.shadowOffset = Vec2(0.f, 2.f);
-        knobSt.shadowBlur = 4.f;
-        knobSt.shadowOpacity = 0.25f;
+        knobSt.shadowBlur = 6.f + 4.f * grow;
+        knobSt.shadowOpacity = 0.4f + 0.3f * grow;
         ctx.DrawRect(Rect(kx, ky, knob, knob), knobSt);
     }
     ctx.EndWidget();

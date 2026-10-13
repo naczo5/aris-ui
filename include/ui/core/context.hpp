@@ -59,6 +59,7 @@ struct PanelStyle {
     Vec4 cornerRadii = Vec4(0.f);
     Vec2 shadowOffset = Vec2(0.f, 0.f);
     float shadowSpread = 0.f, shadowBlur = 0.f, shadowOpacity = 0.f;
+    float backdropBlur = 0.f;   // frosted-glass blur behind the panel (px, 0 = off)
     float padding = 0.f;
     const char* title = nullptr;
     float titleSize = 0.f;
@@ -120,9 +121,29 @@ public:
 
     // --- drawing ---
     void DrawRect(const Rect& rect, const RectStyle& style);
+    // Text. `weight` emboldens (+) or thins (-) glyphs by that many pixels —
+    // e.g. 0.35 for a semi-bold feel from a regular font, -0.15 for light.
     void DrawText(Vec2 pos, std::string_view text, const Color& color, float fontSize,
-                  const Rect* clipRect = nullptr);
+                  const Rect* clipRect = nullptr, float weight = 0.f);
     Vec2 MeasureText(std::string_view text, float fontSize) const;
+    // Anti-aliased line with round caps (the primitive vector icons are built from).
+    void DrawLine(Vec2 a, Vec2 b, float thickness, const Color& color);
+    // Filled / outlined circle helpers (outline when `stroke` > 0).
+    void DrawCircle(Vec2 center, float radius, const Color& color, float stroke = 0.f);
+    // Frosted glass: gaussian-blurs everything already drawn beneath `rect`
+    // (rounded by `radii`) and mixes `tint` (its alpha = mix amount) over it.
+    // Draw the translucent surface *after* this call. `blurRadius` in px.
+    void DrawBackdropBlur(const Rect& rect, const Vec4& radii, float blurRadius,
+                          const Color& tint = Color::Transparent());
+    // Scissor clipping (axis-aligned; nests by intersection).
+    void PushClip(const Rect& rect) { queue_.PushClip(rect); }
+    void PopClip() { queue_.PopClip(); }
+
+    // --- absolute-positioned interactive regions ---
+    // For overlay UIs that place things by hand instead of through Yoga:
+    // registers `rect` as a hit target (above panels) and returns hover/press
+    // state with eased transitions. `label` is hashed with the ID stack.
+    WidgetFrame Interact(const char* label, const Rect& rect);
 
     // --- frame info ---
     float dt() const { return dt_; }
@@ -163,6 +184,7 @@ private:
     // layout registries
     std::vector<HitEntry> prevRects_;        // previous frame (input + drawing)
     std::vector<HitEntry> curRects_;         // this frame (filled at Render)
+    std::vector<HitEntry> overlayRects_;     // Interact() regions, appended on top at Render
     std::unordered_map<WidgetId, Rect> rectById_;   // lookup over prevRects_
 
     // retained panels

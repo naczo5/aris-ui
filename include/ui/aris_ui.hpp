@@ -1,0 +1,15 @@
+#pragma once
+// aris-ui — umbrella header
+#include "ui/core/math.hpp"
+#include "ui/core/easing.hpp"
+#include "ui/core/event.hpp"
+#include "ui/core/id.hpp"
+#include "ui/core/theme.hpp"
+#include "ui/core/widget_state.hpp"
+#include "ui/core/context.hpp"
+#include "ui/layout/layout_node.hpp"
+#include "ui/renderer/command_queue.hpp"
+#include "ui/renderer/batcher.hpp"
+#include "ui/renderer/gl_state_guard.hpp"
+#include "ui/font/font_atlas.hpp"
+#include "ui/widgets/widgets.hpp"

@@ -8,6 +8,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(ARIS_UI_BUILD_EXAMPLES "Build example applications (desktop runner)" ON)
 option(ARIS_UI_BUILD_TOOLS "Build tools (MSDF atlas generator)" ON)
+option(ARIS_UI_BUILD_TESTS "Build the zero-dependency test suite" ON)
 
 # ---------------------------------------------------------------------------
 # Third-party
@@ -97,5 +98,31 @@ if (ARIS_UI_BUILD_EXAMPLES)
     endif()
 
     add_executable(aris_runner examples/desktop_runner/main.cpp)
+    target_include_directories(aris_runner PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_link_libraries(aris_runner PRIVATE aris-ui aris-atlasgen glfw glad stb)
+
+    # Headless UI snapshot tool — renders named scenes to PNGs (agent-friendly
+    # visual verification; no visible window required).
+    add_executable(aris_scene_preview examples/scene_preview/main.cpp)
+    target_include_directories(aris_scene_preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+    target_link_libraries(aris_scene_preview PRIVATE aris-ui aris-atlasgen glfw glad stb)
+endif()
+
+# ---------------------------------------------------------------------------
+# Tests (zero-dependency assert harness, no GL required)
+# ---------------------------------------------------------------------------
+if (ARIS_UI_BUILD_TESTS)
+    enable_testing()
+    add_executable(aris_tests
+        tests/test_main.cpp
+        tests/test_math.cpp
+        tests/test_easing.cpp
+        tests/test_id.cpp
+        tests/test_command_queue.cpp
+        tests/test_widget_state.cpp
+        tests/test_layout.cpp
+    )
+    target_include_directories(aris_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    target_link_libraries(aris_tests PRIVATE aris-ui)
+    add_test(NAME aris_tests COMMAND aris_tests)
 endif()

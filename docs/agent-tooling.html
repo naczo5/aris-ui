@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Tooling — aris-ui</title>
+<meta name="description" content="aris-ui documentation — Agent Tooling">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
+  <nav>
+    <a href="getting-started.html">Getting Started</a><a href="core-concepts.html">Core Concepts</a><a href="widgets.html">Widgets</a><a href="layout.html">Layout</a><a href="rendering.html">Rendering</a><a href="fonts.html">Fonts</a><a href="agent-tooling.html">Agent Tooling</a>
+    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+  </nav>
+</header>
+<main class="site">
+<div class="toc">On this page — <a href="#one-command-verification-loop">One-command verification loop</a> <a href="#visual-previews-headless">Visual previews (headless)</a> <a href="#tests">Tests</a> <a href="#docs-fetching-llm-friendly">Docs fetching (LLM-friendly)</a> <a href="#github-pages">GitHub Pages</a> <a href="#instrumentation-in-the-runner">Instrumentation in the runner</a></div>
+<h1>Agent Tooling</h1>
+<p>aris-ui is built to be <em>changed by AI coding agents safely</em>. Everything in this page exists so an agent can compile, verify, and <strong>see</strong> the result of its edits without a human in the loop.</p>
+<p>Read <code>AGENTS.md</code> in the repository root first — it is the agent contract (repo map, commands, conventions, gotchas).</p>
+<h2 id="one-command-verification-loop">One-command verification loop</h2>
+<pre><code>
+make verify
+</code></pre>
+<p>Runs <code>make test</code> + <code>make preview</code>. After any change to rendering, widgets, layout or fonts, this is the loop to run. It never needs a display.</p>
+<h2 id="visual-previews-headless">Visual previews (headless)</h2>
+<p><code>aris_scene_preview</code> renders named UI scenes into an offscreen GLFW context and writes PNGs — real framebuffer dumps, not mockups:</p>
+<pre><code>
+./build/aris_scene_preview --list                 # scene name&lt;TAB&gt;description
+./build/aris_scene_preview --all --out previews   # render everything
+./build/aris_scene_preview --scene panel,sliders --out previews
+./build/aris_scene_preview --scene text --width 800 --height 600
+</code></pre>
+<table>
+<tr><th>Scene</th><th>Shows</th></tr>
+<tr><td><code>panel</code></td><td>The full canonical demo panel (all widgets)</td></tr>
+<tr><td><code>buttons</code></td><td>Buttons, idle</td></tr>
+<tr><td><code>buttons-hover</code></td><td>First button hovered (eased state, simulated mouse)</td></tr>
+<tr><td><code>buttons-press</code></td><td>First button held down (simulated press)</td></tr>
+<tr><td><code>toggles</code></td><td>Toggle on + off</td></tr>
+<tr><td><code>sliders</code></td><td>Sliders at 0 / mid / full</td></tr>
+<tr><td><code>text</code></td><td>MSDF text ramp 11–26 px + colored variants</td></tr>
+<tr><td><code>card</code></td><td>SDF cards at radius 0 / 10 / 20</td></tr>
+</table>
+<p>Behavior notes for agents writing scenes:</p>
+<ul>
+<li>- <code>--warmup N</code> frames render before the snapshot so hover/press easing settles</li>
+<p>(default 10 ≈ 166 ms of simulated time).</p>
+<li>- Simulated input is injected via <code>ctx.ProcessInput</code> before <code>BeginFrame</code>.</li>
+<li>- Each scene gets a fresh <code>ui::Context</code>; the framebuffer is cleared per frame.</li>
+<li>- Exit code is non-zero on unknown scene names or write failures — safe for</li>
+<p>CI.</p>
+</ul>
+<h2 id="tests">Tests</h2>
+<p><code>make test</code> builds and runs <code>aris_tests</code> through CTest. The suite has zero external dependencies (a ~100-line assert harness in <code>tests/test_main.hpp</code>) and needs no GL context — it covers the pure logic:</p>
+<ul>
+<li>- math: <code>Vec2/Vec4/Rect/Color</code> operators, blending, hex parsing</li>
+<li>- easing: <code>ExpSmooth</code> frame-rate independence, monotonicity, <code>EaseOutCubic</code>,</li>
+<p><code>EaseOutBack</code> overshoot, CSS <code>cubic-bezier</code> reference values</p>
+<li>- ids: FNV-1a 64 against published reference vectors</li>
+<li>- command queue: push/pop/clip-depth accounting, full <code>RectStyle</code> propagation</li>
+<li>- widget state store: target convergence, no overshoot, GC staleness</li>
+<li>- layout: Yoga two-column rows, gaps, stretch, padding, absolute <code>ChildRect</code></li>
+</ul>
+<p>Add a test file under <code>tests/</code>, add it to <code>aris_tests</code> in <code>CMakeLists.txt</code>, follow the <code>TEST(name) { ... CHECK(...); }</code> pattern.</p>
+<h2 id="docs-fetching-llm-friendly">Docs fetching (LLM-friendly)</h2>
+<ul>
+<li>- <code>docs/llms.txt</code> — index of documentation pages (the emerging llms.txt</li>
+<p>standard)</p>
+<li>- <code>docs/llms-full.txt</code> — every documentation page concatenated in one file</li>
+<li>- <code>docs-src/*.md</code> — the same content as plain Markdown, readable directly</li>
+<p>from the repository</p>
+</ul>
+<p>The HTML site in <code>docs/</code> is generated by <code>tools/gen_docs.py</code> (stdlib-only) from <code>docs-src/*.md</code>. Edit the Markdown, run <code>make docs</code>, commit both — the sources are the single source of truth.</p>
+<h2 id="github-pages">GitHub Pages</h2>
+<p>The <code>docs/</code> folder is self-contained and designed to be served by GitHub Pages: repository Settings → Pages → deploy from branch <code>main</code>, directory <code>/docs</code>. No build workflow required.</p>
+<h2 id="instrumentation-in-the-runner">Instrumentation in the runner</h2>
+<p>The interactive runner takes environment switches — handy for agents even though the preview tool is preferred:</p>
+<ul>
+<li>- <code>ARIS_DUMP=N</code> — save the framebuffer as <code>dump_N.png</code> on frame N, then keep</li>
+<p>running</p>
+<li>- <code>ARIS_DEBUG=1</code> — per-frame flush stats (vertex counts, atlas, px-range)</li>
+</ul>
+</main>
+<footer class="site">
+  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>Generated 2026-10-13 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+</footer>
+</body>
+</html>

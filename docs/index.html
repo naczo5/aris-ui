@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aris-ui — a more beautiful ImGui replacement, optimised for agents</title>
+<meta name="description" content="aris-ui is a modern C++20 immediate-mode UI toolkit for OpenGL overlays: SDF-rendered widgets, MSDF text, Yoga flexbox, and a headless preview/test toolchain designed for AI coding agents.">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* landing-only layout */
+  .hero { padding: 84px 0 56px; max-width: 820px; }
+  .kicker {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--pine); margin-bottom: 22px;
+  }
+  .kicker::before { content: "▮ "; color: var(--accent); }
+  .hero h1 {
+    font-size: clamp(2.1em, 5vw, 3.3em); line-height: 1.12; margin: 0 0 20px;
+    letter-spacing: -0.02em; font-weight: 700;
+  }
+  .hero h1 em { font-style: normal; color: var(--accent-soft); }
+  .hero p.lead { font-size: 1.13em; color: var(--dim); max-width: 620px; margin: 0 0 30px; }
+  .cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 46px; }
+  .btn {
+    font-size: 15px; padding: 11px 22px; border-radius: 9px;
+    border: 1px solid var(--line); color: var(--text);
+  }
+  .btn:hover { text-decoration: none; border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
+  .btn code { background: none; border: none; padding: 0; }
+
+  .shot {
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: var(--bg2); box-shadow: 0 22px 60px rgba(0,0,0,0.45);
+  }
+  .shot img { display: block; width: 100%; height: 560px; object-fit: cover; object-position: top; }
+  .shot figcaption {
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    padding: 10px 16px; border-top: 1px solid var(--line);
+  }
+  .shot figcaption b { color: var(--pine); font-weight: 500; }
+
+  section { margin: 72px 0; }
+  h2.sec {
+    font-size: 1.45em; margin: 0 0 6px; padding: 0; border: none;
+  }
+  p.sec-sub { color: var(--dim); margin: 0 0 26px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 20px 22px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 1.02em; }
+  .card h3 .tag {
+    display: inline-block; margin-left: 8px; font-family: var(--mono); font-size: 11px;
+    color: var(--pine); border: 1px solid var(--line); border-radius: 4px;
+    padding: 1px 7px; vertical-align: 2px; background: var(--bg2);
+  }
+  .card p { color: var(--dim); font-size: 14.5px; margin: 0; }
+
+  .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+  .strip figure { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg2); }
+  .strip img { display: block; width: 100%; height: auto; }
+  .strip figcaption {
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim);
+    padding: 8px 12px; border-top: 1px solid var(--line);
+  }
+
+  .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 780px) { .quick { grid-template-columns: 1fr; } }
+  .quick .step { font-size: 13px; color: var(--dim); font-family: var(--mono); margin-bottom: 8px; }
+  .quick .step b { color: var(--pine); font-weight: 600; }
+</style>
+</head>
+<body>
+<header class="site">
+  <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
+  <nav>
+    <a href="getting-started.html">Docs</a>
+    <a href="widgets.html">Widgets</a>
+    <a href="agent-tooling.html">For Agents</a>
+    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+  </nav>
+</header>
+
+<main class="site">
+
+  <section class="hero">
+    <div class="kicker">C++20 · OpenGL 3.3 · MIT</div>
+    <h1>A more beautiful <em>ImGui</em> replacement.<br>Optimised for agents.</h1>
+    <p class="lead">
+      An immediate-mode UI toolkit for OpenGL overlay injection — SDF-rendered
+      widgets, MSDF text that stays crisp at any scale, flexbox panels — with a
+      headless preview and test toolchain your coding agent can run and <b>see</b>.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="getting-started.html">Get started</a>
+      <a class="btn" href="agent-tooling.html"><code>make verify</code>&nbsp;→ PNGs &amp; tests</a>
+    </div>
+    <figure class="shot">
+      <img src="assets/panel.png" alt="aris-ui demo panel: buttons, toggles, sliders and a live preview card" width="560" height="720">
+      <figcaption><b>aris_scene_preview --scene panel</b> — headless framebuffer dump, not a mockup</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2 class="sec">Designed like a still forest at night</h2>
+    <p class="sec-sub">Calm dark surfaces, precise hairlines, one restrained accent. No gradients, no noise — pixels that behave.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>SDF shapes<span class="tag">renderer</span></h3>
+        <p>Rounded rects, borders and soft shadows are analytic signed-distance fields — resolution-independent, antialiased, one draw call for every shape on screen.</p>
+      </div>
+      <div class="card">
+        <h3>MSDF text<span class="tag">fonts</span></h3>
+        <p>Offline multi-channel signed-distance atlases (msdfgen) with em-normalized metrics. One PNG + JSON per font; crisp from 11 px to any DPI.</p>
+      </div>
+      <div class="card">
+        <h3>Flexbox layout<span class="tag">yoga</span></h3>
+        <p>Panels, rows and columns backed by a vendored Yoga tree with an RAII wrapper. Retained between frames, culled when unused.</p>
+      </div>
+      <div class="card">
+        <h3>Host-safe<span class="tag">injection</span></h3>
+        <p>Caller-driven frame loop, no globals, no threads. An RAII guard snapshots and restores the host's entire GL state around the UI pass.</p>
+      </div>
+      <div class="card">
+        <h3>Eased by default<span class="tag">feel</span></h3>
+        <p>Hover, press and value transitions run on frame-rate-independent exponential smoothing. Motion you don't have to write.</p>
+      </div>
+      <div class="card">
+        <h3>Built for agents<span class="tag">tooling</span></h3>
+        <p><code>make verify</code> compiles, tests and renders every scene headlessly to PNGs — an agent can confirm its own visual work.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">Drop into any OpenGL loop</h2>
+    <p class="sec-sub">No windowing, no threading, no swap — you keep the loop, aris-ui keeps the pixels.</p>
+    <div class="quick">
+      <div>
+        <div class="step"><b>01</b> — build &amp; verify</div>
+        <pre><code>git clone &lt;repo&gt; aris-ui &amp;&amp; cd aris-ui
+make configure &amp;&amp; make verify
+# → tests pass, previews/*.png rendered</code></pre>
+      </div>
+      <div>
+        <div class="step"><b>02</b> — one frame of UI</div>
+        <pre><code>ui::GlStateGuard guard;
+ctx.BeginFrame(dt, w, h);
+ctx.BeginPanel("main", rect, style);
+if (ui::Button(ctx, "Click me")) ++clicks;
+ctx.EndPanel();
+ctx.Render();  // host state restored by guard</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">Scenes your agent can look at</h2>
+    <p class="sec-sub">Every UI scene renders headlessly to a PNG — hover states, press states, text ramps, radii.</p>
+    <div class="strip">
+      <figure><img src="assets/buttons-hover.png" alt="buttons with hover state"><figcaption>buttons-hover</figcaption></figure>
+      <figure><img src="assets/sliders.png" alt="sliders at three values"><figcaption>sliders</figcaption></figure>
+      <figure><img src="assets/text.png" alt="MSDF text size ramp"><figcaption>text</figcaption></figure>
+      <figure><img src="assets/card.png" alt="preview cards at different radii"><figcaption>card</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">Roadmap</h2>
+    <p class="sec-sub">Where the forest grows next (see <a href="https://github.com/OWNER/aris-ui/blob/main/PROGRESS.md">PROGRESS.md</a>).</p>
+    <div class="grid">
+      <div class="card"><h3>Background blur</h3><p>Dual-Kawase backdrop blur via FBOs, glows, gradient fills, nine-patch images.</p></div>
+      <div class="card"><h3>GL 2.1 / 150-core</h3><p>Shader variants with runtime probing for older Minecraft render pipelines.</p></div>
+      <div class="card"><h3>Minecraft layer</h3><p>GUI-scale sync, WndProc/swapbuffer hook adapters, injected-DLL example.</p></div>
+      <div class="card"><h3>Widgets v2</h3><p>Dropdowns, text input, scroll views, tooltips, window manager.</p></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site">
+  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>C++20 · OpenGL 3.3 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+</footer>
+</body>
+</html>

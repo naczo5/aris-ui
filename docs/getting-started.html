@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting Started — aris-ui</title>
+<meta name="description" content="aris-ui documentation — Getting Started">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
+  <nav>
+    <a href="getting-started.html">Getting Started</a><a href="core-concepts.html">Core Concepts</a><a href="widgets.html">Widgets</a><a href="layout.html">Layout</a><a href="rendering.html">Rendering</a><a href="fonts.html">Fonts</a><a href="agent-tooling.html">Agent Tooling</a>
+    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+  </nav>
+</header>
+<main class="site">
+<div class="toc">On this page — <a href="#requirements">Requirements</a> <a href="#build">Build</a> <a href="#your-first-frame">Your first frame</a> <a href="#integration-checklist">Integration checklist</a> <a href="#next-steps">Next steps</a></div>
+<h1>Getting Started</h1>
+<p>aris-ui is a modern C++20 immediate-mode UI library for OpenGL. It renders widgets as analytically anti-aliased signed-distance fields, draws text from offline-generated MSDF atlases, lays out panels with Yoga flexbox, and leaves the host&#x27;s OpenGL state exactly as it found it.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>- CMake 3.20+</li>
+<li>- A C++20 compiler (GCC 11+, Clang 13+, MSVC 2019+)</li>
+<li>- OpenGL 3.3 (GL 2.1 / 150-core variants are planned — Stage 10)</li>
+<li>- FreeType (development package) for the atlas generator</li>
+</ul>
+<h2 id="build">Build</h2>
+<pre><code>
+git clone &lt;repo&gt; aris-ui &amp;&amp; cd aris-ui
+make configure     # = cmake -S . -B build -DARIS_UI_BUILD_TESTS=ON
+make build         # = cmake --build build
+make test          # unit tests (ctest)
+make preview       # headless UI snapshots → previews/*.png
+make demo          # interactive desktop runner window
+</code></pre>
+<p>No package hunting: Yoga, msdfgen, glad, stb and nlohmann/json are vendored and pinned under <code>third_party/</code>. Only GLFW (for the examples) is fetched by CMake at configure time.</p>
+<h2 id="your-first-frame">Your first frame</h2>
+<p>aris-ui is caller-driven: <em>you</em> own the frame loop and the GL context, the library never touches a window, swaps a buffer, or starts a thread.</p>
+<pre><code>
+#include &quot;ui/aris_ui.hpp&quot;
+#include &quot;atlas_generator/atlas_gen.hpp&quot;
+
+ui::Context ctx;                 // one per process
+ui::FontAtlas font;
+font.Load(&quot;atlas/ui.png&quot;, &quot;atlas/ui.json&quot;);
+ctx.SetTheme(ui::Theme::Default());
+ctx.SetFont(&amp;font);
+
+// --- your render loop, every frame ---
+ui::GlStateGuard guard;          // snapshots ALL relevant GL state
+ctx.BeginFrame(dt, width, height);
+ctx.ProcessInput(event);         // translated host events (see Core Concepts)
+
+ctx.BeginPanel(&quot;main&quot;, ui::Rect(28, 28, 470, 640),
+               ui::PanelStyle::FromTheme(ui::Theme::Default(), 18.f, &quot;Hello&quot;));
+if (ui::Button(ctx, &quot;Click me&quot;)) ++clicks;
+ui::Toggle(ctx, &quot;Enabled&quot;, &amp;enabled);
+ui::Slider(ctx, &quot;Opacity&quot;, &amp;opacity, 0.f, 1.f);
+ctx.EndPanel();
+
+ctx.Render();                    // layout + draw; guard restores host state
+</code></pre>
+<p>Generating the font atlas (offline, cached — regenerate only when the font changes):</p>
+<pre><code>
+std::string err;
+ui_atlas::Params params;                 // fontSize 48, pxRange 4, ASCII + extras
+ui_atlas::GenerateAndWrite(&quot;font.ttf&quot;, &quot;atlas/ui&quot;, params, err);
+</code></pre>
+<p>Or from the command line: <code>./build/atlasgen &lt;font.ttf&gt; &lt;out-prefix&gt;</code>.</p>
+<h2 id="integration-checklist">Integration checklist</h2>
+<ol>
+<li>1. Translate your platform input into <code>ui::InputEvent</code> variants and feed each</li>
+<p>one to <code>ctx.ProcessInput()</code> before drawing.</p>
+<li>2. Wrap <code>ctx.Render()</code> in a <code>ui::GlStateGuard</code> so your own pipeline state</li>
+<p>(blend, depth, VAOs, program) survives the UI pass untouched.</p>
+<li>3. Draw the UI <strong>last</strong>, after your scene, with depth testing disabled.</li>
+</ol>
+<h2 id="next-steps">Next steps</h2>
+<ul>
+<li>- <a href="core-concepts.html">Core Concepts</a> — the frame lifecycle and state model</li>
+<li>- <a href="widgets.html">Widgets</a> — the built-in control set and theming tokens</li>
+<li>- <a href="layout.html">Layout</a> — panels, rows, columns and flexbox styling</li>
+<li>- <a href="rendering.html">Rendering</a> — SDF shader contract and the batcher</li>
+<li>- <a href="fonts.html">Fonts</a> — the MSDF atlas pipeline and JSON schema</li>
+<li>- <a href="agent-tooling.html">Agent Tooling</a> — previews, tests and docs for coding agents</li>
+</ul>
+</main>
+<footer class="site">
+  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>Generated 2026-10-13 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+</footer>
+</body>
+</html>

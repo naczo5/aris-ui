@@ -31,6 +31,14 @@ struct Vec4 {
     constexpr Vec4() = default;
     constexpr Vec4(float x_, float y_, float z_, float w_) : x(x_), y(y_), z(z_), w(w_) {}
     constexpr Vec4(float v) : x(v), y(v), z(v), w(v) {}
+
+    constexpr float operator[](int i) const {
+        return i == 0 ? x : (i == 1 ? y : (i == 2 ? z : w));
+    }
+    constexpr bool operator==(const Vec4& o) const {
+        return x == o.x && y == o.y && z == o.z && w == o.w;
+    }
+    constexpr bool operator!=(const Vec4& o) const { return !(*this == o); }
 };
 
 struct Rect {
@@ -53,6 +61,11 @@ struct Rect {
         return {x + horizontal, y + vertical, w - 2 * horizontal, h - 2 * vertical};
     }
     constexpr Rect Offset(Vec2 d) const { return {x + d.x, y + d.y, w, h}; }
+
+    constexpr bool operator==(const Rect& o) const {
+        return x == o.x && y == o.y && w == o.w && h == o.h;
+    }
+    constexpr bool operator!=(const Rect& o) const { return !(*this == o); }
 };
 
 // 8-bit RGBA color.
@@ -93,6 +106,11 @@ struct Color {
         };
         return Color(ch(from.r, to.r), ch(from.g, to.g), ch(from.b, to.b), ch(from.a, to.a));
     }
+
+    constexpr bool operator==(const Color& o) const {
+        return r == o.r && g == o.g && b == o.b && a == o.a;
+    }
+    constexpr bool operator!=(const Color& o) const { return !(*this == o); }
 };
 
 } // namespace ui

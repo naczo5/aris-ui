@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fonts — aris-ui</title>
+<meta name="description" content="aris-ui documentation — Fonts">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
+  <nav>
+    <a href="getting-started.html">Getting Started</a><a href="core-concepts.html">Core Concepts</a><a href="widgets.html">Widgets</a><a href="layout.html">Layout</a><a href="rendering.html">Rendering</a><a href="fonts.html">Fonts</a><a href="agent-tooling.html">Agent Tooling</a>
+    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+  </nav>
+</header>
+<main class="site">
+<div class="toc">On this page — <a href="#generating-an-atlas">Generating an atlas</a> <a href="#runtime-loading">Runtime loading</a> <a href="#json-schema">JSON schema</a> <a href="#msdf-details-msdfgen-v1-12-semantics">MSDF details (msdfgen v1.12 semantics)</a> <a href="#text-layout">Text layout</a></div>
+<h1>Fonts</h1>
+<p>Text is rendered from offline-generated MSDF atlases. At runtime you load a PNG + JSON pair — no font parsing, no FreeType dependency in the shipped app.</p>
+<h2 id="generating-an-atlas">Generating an atlas</h2>
+<p>From the CLI (built as <code>build/atlasgen</code>):</p>
+<pre><code>
+./build/atlasgen /usr/share/fonts/TTF/DejaVuSans.ttf atlas/ui
+</code></pre>
+<p>Or from code:</p>
+<pre><code>
+ui_atlas::Params params;
+params.fontSize = 48.f;         // reference px size (em-normalization basis)
+params.pxRange  = 4.f;          // MSDF distance range in atlas pixels
+params.firstCodepoint = 32;     // default: printable ASCII
+params.lastCodepoint  = 126;
+params.extraChars = &quot;\xC3\x97\xE2\x80\x94&quot;;   // UTF-8 extras (×, —)
+
+std::string err;
+ui_atlas::GenerateAndWrite(&quot;font.ttf&quot;, &quot;atlas/ui&quot;, params, err);
+</code></pre>
+<p><code>GenerateAndWrite</code> caches: outputs are regenerated only when the PNG is older than the font file. Delete the pair after changing generator code.</p>
+<h2 id="runtime-loading">Runtime loading</h2>
+<pre><code>
+ui::FontAtlas font;
+if (!font.Load(&quot;atlas/ui.png&quot;, &quot;atlas/ui.json&quot;)) { /* handle error */ }
+ctx.SetFont(&amp;font);
+</code></pre>
+<p><code>Load</code> uploads the texture (needs a live GL context) and parses the metadata. Metrics are em-normalized: glyph quads scale by <code>fontSize</code> at draw time, so one atlas serves every size and DPI crisply.</p>
+<p>&gt; The atlas owns a GL texture. Call <code>font.Unload()</code> (or let it go out of &gt; scope) <strong>before</strong> your GL context is destroyed.</p>
+<h2 id="json-schema">JSON schema</h2>
+<pre><code>
+{
+  &quot;atlas&quot;:   { &quot;width&quot;: 512, &quot;height&quot;: 512 },
+  &quot;pxRange&quot;: 4,
+  &quot;metrics&quot;: { &quot;fontSize&quot;: 48, &quot;lineHeight&quot;: 1.17, &quot;ascender&quot;: 0.93, &quot;descender&quot;: -0.24 },
+  &quot;glyphs&quot;: [
+    {
+      &quot;codepoint&quot;: 65,
+      &quot;advance&quot;: 0.684,
+      &quot;planeBounds&quot;: [0.008, 0.0, 0.676, 0.729],   // em units, y-up: l, b, r, t
+      &quot;atlasBounds&quot;: [179, 217, 32.06, 34.99]      // PNG pixels: x, y (top-left origin), w, h
+    }
+  ]
+}
+</code></pre>
+<ul>
+<li>- <code>planeBounds</code> — glyph ink box in em units (multiplied by <code>fontSize</code> to get</li>
+<p>screen-space quads).</p>
+<li>- <code>atlasBounds</code> — the ink rectangle in atlas pixels. The runtime maps</li>
+<p><code>planeBounds</code> 1:1 onto this rect, so padding never distorts glyphs.</p>
+<li>- <code>metrics</code> — em-normalized plane metrics; <code>Ascender(fontSize)</code> and</li>
+<p><code>LineHeight(fontSize)</code> multiply them out.</p>
+</ul>
+<h2 id="msdf-details-msdfgen-v1-12-semantics">MSDF details (msdfgen v1.12 semantics)</h2>
+<p>The generator calls msdfgen with these invariants — keep them if you touch it:</p>
+<ul>
+<li>- <code>loadGlyph(..., FONT_SCALING_EM_NORMALIZED)</code> → shape space is em.</li>
+<li>- Projection is <code>pixel = scale * (shape + translate)</code> with translate in</li>
+<p><strong>shape units</strong>: <code>translate = margin/fs - bounds.{l,b}</code>.</p>
+<li>- <code>Range</code> is in the same units as the shape: <code>Range(pxRange / fs)</code>.</li>
+<li>- <code>generateMSDF</code> applies error correction internally; no second pass needed.</li>
+<li>- Glyphs are shelf-packed with <code>pxRange + 1</code> px separation, blitted after all</li>
+<p>placements so the row stride matches the final atlas size.</p>
+</ul>
+<h2 id="text-layout">Text layout</h2>
+<p><code>ctx.DrawText</code> decodes UTF-8, resolves each codepoint through <code>FontAtlas::GetGlyph</code> (falling back to <code>?</code>), advances the pen by <code>advance * fontSize</code>, and positions quads at <code>baseline - top * fontSize</code>. <code>ctx.MeasureText</code> sums the same advances — useful for right-aligned labels (see the slider value text).</p>
+<p>Shaping and kerning are not implemented yet (roadmap Stage 13).</p>
+</main>
+<footer class="site">
+  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>Generated 2026-10-13 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+</footer>
+</body>
+</html>

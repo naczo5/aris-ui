@@ -70,6 +70,16 @@ criteria; statuses are updated as work completes.
 - [x] Atlas auto-generation on startup (cached), CLI font override
 - **Acceptance:** all 5 MVP deliverables demonstrable in one binary.
 
+## Stage 8.5 — Agent tooling & docs — `DONE`
+- [x] Headless scene preview tool `examples/scene_preview` → `build/aris_scene_preview`: 8 named scenes (panel, buttons, buttons-hover/press with simulated input, toggles, sliders, text, card) rendered offscreen to PNG, CLI for scene selection/size/warmup
+- [x] Shared demo bootstrap `examples/common/AppSupport.hpp` (font discovery, atlas bootstrap, canonical `BuildDemoUi`)
+- [x] Zero-dependency test suite `tests/` (30 tests: math, easing, ids, command queue, widget state store, Yoga layout) wired into CMake/ctest
+- [x] `Makefile`: configure / build / test / preview / demo / docs / verify / clean / help
+- [x] `AGENTS.md`: repo map, verification loop, critical gotchas, conventions
+- [x] Docs generator `tools/gen_docs.py` (stdlib-only md→html) + `docs-src/*.md` (7 pages)
+- [x] Landing page `docs/index.html` + generated `docs/*.html`, `style.css`, `llms.txt`, `llms-full.txt`
+- **Acceptance:** `make verify` = tests pass + previews render; docs site browsable from `docs/index.html`.
+
 ---
 
 ## Stage 9+ — Roadmap (pending)
@@ -80,7 +90,7 @@ criteria; statuses are updated as work completes.
 - [ ] **Stage 13 — Text v2:** kerning/shaping (HarfBuzz optional), glyph cache with runtime re-raster, font fallbacks
 - [ ] **Stage 14 — Widgets v2:** checkbox/dropdown/text-input/scrollview/tooltip, nesting, window manager (drag, z-order)
 - [ ] **Stage 15 — Dev experience:** hot-reload of widget code/styles in runner, GPU timing overlay, screenshot tests
-- [ ] **Stage 16 — Packaging:** prebuilt binaries, CMake `find_package(aris-ui)`, docs site
+- [ ] **Stage 16 — Packaging:** prebuilt binaries, CMake `find_package(aris-ui)`
 
 ### Known MVP limitations (documented, by design)
 - One-frame latency between layout changes and their first visible frame (egui-style).

@@ -1,0 +1,612 @@
+# Getting Started
+
+# Getting Started
+
+aris-ui is a modern C++20 immediate-mode UI library for OpenGL. It renders
+widgets as analytically anti-aliased signed-distance fields, draws text from
+offline-generated MSDF atlases, lays out panels with Yoga flexbox, and leaves
+the host's OpenGL state exactly as it found it.
+
+## Requirements
+
+- CMake 3.20+
+- A C++20 compiler (GCC 11+, Clang 13+, MSVC 2019+)
+- OpenGL 3.3 (GL 2.1 / 150-core variants are planned — Stage 10)
+- FreeType (development package) for the atlas generator
+
+## Build
+
+```sh
+git clone <repo> aris-ui && cd aris-ui
+make configure     # = cmake -S . -B build -DARIS_UI_BUILD_TESTS=ON
+make build         # = cmake --build build
+make test          # unit tests (ctest)
+make preview       # headless UI snapshots → previews/*.png
+make demo          # interactive desktop runner window
+```
+
+No package hunting: Yoga, msdfgen, glad, stb and nlohmann/json are vendored
+and pinned under `third_party/`. Only GLFW (for the examples) is fetched by
+CMake at configure time.
+
+## Your first frame
+
+aris-ui is caller-driven: *you* own the frame loop and the GL context, the
+library never touches a window, swaps a buffer, or starts a thread.
+
+```cpp
+#include "ui/aris_ui.hpp"
+#include "atlas_generator/atlas_gen.hpp"
+
+ui::Context ctx;                 // one per process
+ui::FontAtlas font;
+font.Load("atlas/ui.png", "atlas/ui.json");
+ctx.SetTheme(ui::Theme::Default());
+ctx.SetFont(&font);
+
+// --- your render loop, every frame ---
+ui::GlStateGuard guard;          // snapshots ALL relevant GL state
+ctx.BeginFrame(dt, width, height);
+ctx.ProcessInput(event);         // translated host events (see Core Concepts)
+
+ctx.BeginPanel("main", ui::Rect(28, 28, 470, 640),
+               ui::PanelStyle::FromTheme(ui::Theme::Default(), 18.f, "Hello"));
+if (ui::Button(ctx, "Click me")) ++clicks;
+ui::Toggle(ctx, "Enabled", &enabled);
+ui::Slider(ctx, "Opacity", &opacity, 0.f, 1.f);
+ctx.EndPanel();
+
+ctx.Render();                    // layout + draw; guard restores host state
+```
+
+Generating the font atlas (offline, cached — regenerate only when the font
+changes):
+
+```cpp
+std::string err;
+ui_atlas::Params params;                 // fontSize 48, pxRange 4, ASCII + extras
+ui_atlas::GenerateAndWrite("font.ttf", "atlas/ui", params, err);
+```
+
+Or from the command line: `./build/atlasgen <font.ttf> <out-prefix>`.
+
+## Integration checklist
+
+1. Translate your platform input into `ui::InputEvent` variants and feed each
+   one to `ctx.ProcessInput()` before drawing.
+2. Wrap `ctx.Render()` in a `ui::GlStateGuard` so your own pipeline state
+   (blend, depth, VAOs, program) survives the UI pass untouched.
+3. Draw the UI **last**, after your scene, with depth testing disabled.
+
+## Next steps
+
+- [Core Concepts](core-concepts.html) — the frame lifecycle and state model
+- [Widgets](widgets.html) — the built-in control set and theming tokens
+- [Layout](layout.html) — panels, rows, columns and flexbox styling
+- [Rendering](rendering.html) — SDF shader contract and the batcher
+- [Fonts](fonts.html) — the MSDF atlas pipeline and JSON schema
+- [Agent Tooling](agent-tooling.html) — previews, tests and docs for coding agents
+
+---
+
+# Core Concepts
+
+# Core Concepts
+
+aris-ui follows an immediate-mode *API over retained state* model: your code
+declares the UI every frame like Dear ImGui, while the library retains the
+expensive parts (widget state, Yoga layout tree, GPU batches) between frames.
+
+## The frame lifecycle
+
+```cpp
+ctx.BeginFrame(dt, width, height);   // clock, mouse, hot-widget recomputation
+ctx.ProcessInput(event);             // feed translated host events (optional, per event)
+// ... declare your UI with BeginPanel / widgets / DrawText / DrawRect ...
+ctx.Render();                        // run layout, flush draw commands to GL
+```
+
+- `BeginFrame` rolls the rect registry: rects computed last frame drive input
+  and drawing this frame (**one-frame latency** — an egui-style tradeoff that
+  keeps layout and hit-testing decoupled).
+- `ProcessInput` returns `true` when the UI consumed an event (e.g. a click on
+  a widget). Consume policy: the UI blocks events that hit interactive
+  widgets, everything else passes through to the host.
+- `Render` runs the Yoga layout pass, resolves widget rects, and replays the
+  recorded command queue through the batcher.
+
+## Events
+
+The host translates platform input into a `std::variant`:
+
+```cpp
+using InputEvent = std::variant<
+    MouseMoveEvent,      // Vec2 pos
+    MouseButtonEvent,    // button, pressed, pos
+    MouseScrollEvent,    // delta, pos
+    KeyEvent,            // key code, pressed, repeat
+    TextInputEvent>;     // codepoint
+```
+
+Mouse coordinates are in the same pixel space the UI is drawn in (y-down,
+origin top-left). There is no inversion, no scaling — translate 1:1.
+
+## Retained state
+
+`WidgetStateStore` keeps one `WidgetState` per widget ID (FNV-1a hash of the
+label + the ID stack):
+
+```cpp
+struct WidgetState {
+    float hoverT;      // eased 0..1 hover amount
+    float pressT;      // eased 0..1 press amount
+    float valueT;      // widget value (e.g. toggle knob position)
+};
+```
+
+Targets are set by widgets each frame; `Advance()` eases them with a
+frame-rate-independent exponential filter (`ExpSmooth`, ~14/s for hover,
+~22/s for press). Un-touched states are garbage-collected after 240 frames.
+
+## Widget IDs
+
+IDs are derived from the string label combined with the container ID stack, so
+identical labels in different panels never collide. Hashing is deterministic
+(FNV-1a 64, tested against published reference vectors).
+
+## Drawing primitives
+
+You rarely need these, but they are the public surface everything else uses:
+
+```cpp
+ctx.DrawRect(const Rect& rect, const RectStyle& style);
+ctx.DrawText(Vec2 pos, std::string_view utf8, const Color& color,
+             float fontSize, const Rect* clipRect = nullptr);
+Vec2 ctx.MeasureText(std::string_view utf8, float fontSize) const;
+```
+
+`RectStyle` packs fill, per-corner radii, border and a soft drop shadow
+(offset / spread / blur / opacity). `DrawText` decodes UTF-8, walks glyph
+quads, and clips against `clipRect` (passing your panel content rect is the
+convention).
+
+## Command queue
+
+`ctx.Render()` first records a frame's worth of POD commands
+(`RoundedRect`, `Glyph`, `ClipPush`/`ClipPop`) into a `ui::CommandQueue`,
+then replays them through the OpenGL batcher. The queue is pure data — you can
+inspect it headlessly (the test suite does exactly that) or replay it with
+your own backend later.
+
+## What the library does NOT do
+
+- No windowing, no threading, no buffer swapping — the host owns the loop.
+- No global state, no singletons: one `ui::Context` per process, pass it around.
+- No rendering beyond GL 3.3 core today (older variants are roadmap Stage 10).
+
+---
+
+# Widgets
+
+# Widgets
+
+All widgets are free functions taking the context first. They require an
+active panel (`BeginPanel`/`EndPanel`) because layout belongs to the Yoga
+tree. Every widget draws *and* handles input in the same call.
+
+```cpp
+#include "ui/widgets/widgets.hpp"
+```
+
+## API
+
+| Function | Signature | Behavior |
+| --- | --- | --- |
+| Button | `bool Button(Context&, const char* label)` | Returns true on the frame the click completes (press + release inside). |
+| Toggle | `void Toggle(Context&, const char* label, bool* value)` | Flips `*value` when clicked; knob position eases via `valueT`. |
+| Slider | `void Slider(Context&, const char* label, float* value, float minValue, float maxValue)` | Updates `*value` while dragged; shows a right-aligned value label. |
+| Label | `void Label(Context&, const char* text, Color color = {}, float fontSize = 0.f)` | Static text; `fontSize = 0` uses the theme default. |
+
+## Visual states
+
+Colors and shadows ease through `WidgetStateStore` — buttons lift on hover
+(`hoverT`) and settle when pressed (`pressT`), toggles slide their knob with
+`valueT`. The states are frame-rate independent (exponential smoothing), so
+animations look identical at 60 or 240 fps.
+
+| State | Fill | Shadow |
+| --- | --- | --- |
+| idle | `accent` | opacity 0.18, offset (0,2) |
+| hover | `accentHover` | opacity 0.32, offset (0,5) |
+| press | `accentActive` | opacity 0.08, offset (0,2) |
+
+You can inspect a widget's eased state yourself via
+`ctx.theme()` + `WidgetStateStore` if you build custom controls.
+
+## Custom widgets
+
+Custom controls are just immediate-mode code using the primitives:
+
+```cpp
+void ColorDot(ui::Context& ctx, ui::Color color) {
+    ui::WidgetFrame w = ctx.BeginWidget("dot", 20.f);
+    if (w.rect.Valid()) {
+        ui::RectStyle st;
+        st.fill = color;
+        st.cornerRadii = ui::Vec4(10.f);
+        ctx.DrawRect(w.rect, st);
+    }
+    ctx.EndWidget();
+}
+```
+
+`BeginWidget(label, height)` creates a full-width flexbox row of the given
+height inside the current panel and returns a frame with `rect` (valid from
+the previous frame's layout) and `state` (the retained `WidgetState`).
+
+## Theming
+
+Everything visual is a token in `ui::Theme` (see `include/ui/core/theme.hpp`).
+Set a custom theme with `ctx.SetTheme(theme)` before the first frame.
+
+| Token | Default | Purpose |
+| --- | --- | --- |
+| `panelBg` | `0x15191F` | Panel surface |
+| `panelBorder` | `0x2A3038` | Panel hairline |
+| `text` / `textDim` | `0xE6EDF3` / `0x8B949E` | Primary / secondary text |
+| `accent` | `0x7C5CFF` | Interactive fill (buttons, active toggle, slider fill) |
+| `accentHover` / `accentActive` | `0x9277FF` / `0x6A4CE0` | Hover / pressed accent |
+| `controlBg`, `controlBorder`, `trackBg` | dark greys | Inactive control surfaces |
+| `panelRadius` / `controlRadius` | 12 / 8 px | Corner radii |
+| `shadowOffset` / `shadowBlur` / `shadowOpacity` | (0,6) / 16 / 0.28 | Panel shadow |
+| `fontSize` / `rowGap` / `columnGap` / `controlHeight` | 15 / 10 / 12 / 34 px | Spacing metrics |
+
+Previews of every state live in the repo: run `make preview` and read
+`previews/buttons.png`, `previews/buttons-hover.png`, `previews/buttons-press.png`,
+`previews/toggles.png`, `previews/sliders.png`.
+
+---
+
+# Layout
+
+# Layout
+
+Layout is powered by a vendored Yoga (flexbox) tree, exposed through an RAII
+wrapper: `ui::LayoutNode`. You usually interact with it through panels and
+groups rather than nodes directly.
+
+## Panels
+
+A panel is an absolutely positioned root node with a title, padding, border
+and shadow. Panels are the *containers* of the retained layout tree — they are
+identified by string id and reused across frames.
+
+```cpp
+ui::PanelStyle ps = ui::PanelStyle::FromTheme(ui::Theme::Default(), 18.f, "Title");
+ctx.BeginPanel("main", ui::Rect(28, 28, 470, 640), ps);
+// ... declare rows, columns, widgets ...
+ctx.EndPanel();
+```
+
+- `Rect` is the on-screen position/size in pixels (y-down).
+- `PanelStyle::FromTheme(theme, padding, title)` derives the standard look;
+  every field is overridable (colors, radii, shadow, title size).
+- `title` is optional; a `nullptr` title renders a borderless content panel.
+
+## Rows and columns
+
+```cpp
+ctx.BeginRow();          // horizontal flex container
+ctx.BeginColumn();       // vertical flex container inside a row
+// ... widgets stack inside ...
+ctx.EndGroup();          // closes the innermost open group
+ctx.EndGroup();
+```
+
+`BeginRow()`/`BeginColumn()` are thin wrappers over `BeginGroup(bool row)`.
+Groups use `rowGap`/`columnGap` from the theme and stretch children by
+default. The demo runner builds a two-column panel exactly this way — see
+`examples/common/AppSupport.hpp::BuildDemoUi`.
+
+## Styling nodes directly
+
+For custom layout behavior, use `ui::LayoutNode` (this is what the internals
+use):
+
+```cpp
+ui::LayoutNode node;
+node.SetFlexDirection(YGFlexDirectionRow);
+node.SetGap(YGGutterColumn, 12.f);
+node.SetFlexGrow(1.f);
+node.SetPaddingAll(16.f);
+node.SetWidth(400.f);
+```
+
+Computed rects read back with `LayoutLeft/Top/Width/Height()` (parent-relative)
+or `ChildRect(parent)` for the absolute rect. The full Yoga style surface is
+wrapped: flex, grow/shrink, align, gaps, padding/margin/border per edge,
+min/max constraints, position type.
+
+## One-frame latency
+
+Widget rects come from the *previous* frame's layout. This is deliberate:
+
+- input hit-testing never depends on work done later in the same frame;
+- widgets can draw immediately with stable geometry;
+- the cost is a single frame of delay when a panel resizes or first appears.
+
+If you need a new panel to appear already laid out, declare it one frame
+before making it visible (or accept the one-frame pop — it's imperceptible at
+overlay frame rates).
+
+---
+
+# Rendering
+
+# Rendering
+
+The renderer draws everything as signed-distance fields in a single GL 3.3
+core pipeline. No textures for shapes, no geometry for corners — a quad per
+widget and a fragment shader that does the work.
+
+## Pipeline per frame
+
+1. Widgets record POD commands into `ui::CommandQueue`
+   (`RoundedRect`, `Glyph`, `ClipPush`/`ClipPop`).
+2. `Batcher` expands each command into padded quads (96-byte interleaved
+   vertices) and batches: one draw for all rects, one draw per atlas/font-size
+   run for glyphs.
+3. `GlStateGuard` (RAII) saved the host's state before the pass and restores
+   it afterwards — program, VAO/VBO/IBO bindings, blend func + equation,
+   cull/depth/scissor, viewport, texture bindings, active texture, pixel
+   store.
+
+## Blend contract
+
+The batcher **owns** blending for the UI pass and enables premultiplied
+alpha:
+
+```glsl
+glEnable(GL_BLEND);
+glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
+                    GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+```
+
+Every fragment the shaders emit is premultiplied (shadow is pure black with
+alpha; fill/border/text are `rgb * a`). Host code that wants its state back
+gets exactly what it had.
+
+## Shape shader
+
+Rounded rects are analytic SDFs with per-corner radii:
+
+- antialiased fill via `fwidth`-scaled `smoothstep`
+- inner border of configurable width and color
+- soft drop shadow: the shadow SDF is the same rect offset by
+  `shadowOffset`, grown by `shadowSpread`, with a `±shadowBlur` falloff,
+  multiplied by `shadowOpacity`
+
+## Text shader
+
+Glyphs are MSDF (multi-channel signed distance fields) sampled from a single
+atlas texture:
+
+```glsl
+float sd = median3(sample.rgb) - 0.5;
+float screenPxRange = /* atlas pxRange scaled to the current font size */;
+float alpha = clamp(sd * screenPxRange + 0.5, 0.0, 1.0);
+```
+
+`screenPxRange` is derived per-fragment from `fwidth(uv)` so text stays crisp
+at any scale without regenerating anything.
+
+## Clipping
+
+`ClipPush`/`ClipPop` commands map to `glScissor` in y-down pixel coordinates.
+The queue tracks depth (max 32) and pairs pushes/pops; nested panels and
+text clipping compose naturally.
+
+## Notes for custom backends
+
+The command queue is pure data (see `include/ui/renderer/command_queue.hpp`)
+— replay it with anything. The GL batcher is a reference backend. The vertex
+format packs: rect (4f), radii (4f), color (4 x u8), border color (4 x u8),
+params (4f: border width, shadow spread, shadow blur, is-glyph), shadow
+(4f: offset xy, opacity, quad padding), uv (4f), position (2f).
+
+---
+
+# Fonts
+
+# Fonts
+
+Text is rendered from offline-generated MSDF atlases. At runtime you load a
+PNG + JSON pair — no font parsing, no FreeType dependency in the shipped app.
+
+## Generating an atlas
+
+From the CLI (built as `build/atlasgen`):
+
+```sh
+./build/atlasgen /usr/share/fonts/TTF/DejaVuSans.ttf atlas/ui
+```
+
+Or from code:
+
+```cpp
+ui_atlas::Params params;
+params.fontSize = 48.f;         // reference px size (em-normalization basis)
+params.pxRange  = 4.f;          // MSDF distance range in atlas pixels
+params.firstCodepoint = 32;     // default: printable ASCII
+params.lastCodepoint  = 126;
+params.extraChars = "\xC3\x97\xE2\x80\x94";   // UTF-8 extras (×, —)
+
+std::string err;
+ui_atlas::GenerateAndWrite("font.ttf", "atlas/ui", params, err);
+```
+
+`GenerateAndWrite` caches: outputs are regenerated only when the PNG is older
+than the font file. Delete the pair after changing generator code.
+
+## Runtime loading
+
+```cpp
+ui::FontAtlas font;
+if (!font.Load("atlas/ui.png", "atlas/ui.json")) { /* handle error */ }
+ctx.SetFont(&font);
+```
+
+`Load` uploads the texture (needs a live GL context) and parses the metadata.
+Metrics are em-normalized: glyph quads scale by `fontSize` at draw time, so
+one atlas serves every size and DPI crisply.
+
+> The atlas owns a GL texture. Call `font.Unload()` (or let it go out of
+> scope) **before** your GL context is destroyed.
+
+## JSON schema
+
+```json
+{
+  "atlas":   { "width": 512, "height": 512 },
+  "pxRange": 4,
+  "metrics": { "fontSize": 48, "lineHeight": 1.17, "ascender": 0.93, "descender": -0.24 },
+  "glyphs": [
+    {
+      "codepoint": 65,
+      "advance": 0.684,
+      "planeBounds": [0.008, 0.0, 0.676, 0.729],   // em units, y-up: l, b, r, t
+      "atlasBounds": [179, 217, 32.06, 34.99]      // PNG pixels: x, y (top-left origin), w, h
+    }
+  ]
+}
+```
+
+- `planeBounds` — glyph ink box in em units (multiplied by `fontSize` to get
+  screen-space quads).
+- `atlasBounds` — the ink rectangle in atlas pixels. The runtime maps
+  `planeBounds` 1:1 onto this rect, so padding never distorts glyphs.
+- `metrics` — em-normalized plane metrics; `Ascender(fontSize)` and
+  `LineHeight(fontSize)` multiply them out.
+
+## MSDF details (msdfgen v1.12 semantics)
+
+The generator calls msdfgen with these invariants — keep them if you touch it:
+
+- `loadGlyph(..., FONT_SCALING_EM_NORMALIZED)` → shape space is em.
+- Projection is `pixel = scale * (shape + translate)` with translate in
+  **shape units**: `translate = margin/fs - bounds.{l,b}`.
+- `Range` is in the same units as the shape: `Range(pxRange / fs)`.
+- `generateMSDF` applies error correction internally; no second pass needed.
+- Glyphs are shelf-packed with `pxRange + 1` px separation, blitted after all
+  placements so the row stride matches the final atlas size.
+
+## Text layout
+
+`ctx.DrawText` decodes UTF-8, resolves each codepoint through
+`FontAtlas::GetGlyph` (falling back to `?`), advances the pen by
+`advance * fontSize`, and positions quads at
+`baseline - top * fontSize`. `ctx.MeasureText` sums the same advances —
+useful for right-aligned labels (see the slider value text).
+
+Shaping and kerning are not implemented yet (roadmap Stage 13).
+
+---
+
+# Agent Tooling
+
+# Agent Tooling
+
+aris-ui is built to be *changed by AI coding agents safely*. Everything in
+this page exists so an agent can compile, verify, and **see** the result of
+its edits without a human in the loop.
+
+Read `AGENTS.md` in the repository root first — it is the agent contract
+(repo map, commands, conventions, gotchas).
+
+## One-command verification loop
+
+```sh
+make verify
+```
+
+Runs `make test` + `make preview`. After any change to rendering, widgets,
+layout or fonts, this is the loop to run. It never needs a display.
+
+## Visual previews (headless)
+
+`aris_scene_preview` renders named UI scenes into an offscreen GLFW context
+and writes PNGs — real framebuffer dumps, not mockups:
+
+```sh
+./build/aris_scene_preview --list                 # scene name<TAB>description
+./build/aris_scene_preview --all --out previews   # render everything
+./build/aris_scene_preview --scene panel,sliders --out previews
+./build/aris_scene_preview --scene text --width 800 --height 600
+```
+
+| Scene | Shows |
+| --- | --- |
+| `panel` | The full canonical demo panel (all widgets) |
+| `buttons` | Buttons, idle |
+| `buttons-hover` | First button hovered (eased state, simulated mouse) |
+| `buttons-press` | First button held down (simulated press) |
+| `toggles` | Toggle on + off |
+| `sliders` | Sliders at 0 / mid / full |
+| `text` | MSDF text ramp 11–26 px + colored variants |
+| `card` | SDF cards at radius 0 / 10 / 20 |
+
+Behavior notes for agents writing scenes:
+
+- `--warmup N` frames render before the snapshot so hover/press easing settles
+  (default 10 ≈ 166 ms of simulated time).
+- Simulated input is injected via `ctx.ProcessInput` before `BeginFrame`.
+- Each scene gets a fresh `ui::Context`; the framebuffer is cleared per frame.
+- Exit code is non-zero on unknown scene names or write failures — safe for
+  CI.
+
+## Tests
+
+`make test` builds and runs `aris_tests` through CTest. The suite has zero
+external dependencies (a ~100-line assert harness in `tests/test_main.hpp`)
+and needs no GL context — it covers the pure logic:
+
+- math: `Vec2/Vec4/Rect/Color` operators, blending, hex parsing
+- easing: `ExpSmooth` frame-rate independence, monotonicity, `EaseOutCubic`,
+  `EaseOutBack` overshoot, CSS `cubic-bezier` reference values
+- ids: FNV-1a 64 against published reference vectors
+- command queue: push/pop/clip-depth accounting, full `RectStyle` propagation
+- widget state store: target convergence, no overshoot, GC staleness
+- layout: Yoga two-column rows, gaps, stretch, padding, absolute `ChildRect`
+
+Add a test file under `tests/`, add it to `aris_tests` in `CMakeLists.txt`,
+follow the `TEST(name) { ... CHECK(...); }` pattern.
+
+## Docs fetching (LLM-friendly)
+
+- `docs/llms.txt` — index of documentation pages (the emerging llms.txt
+  standard)
+- `docs/llms-full.txt` — every documentation page concatenated in one file
+- `docs-src/*.md` — the same content as plain Markdown, readable directly
+  from the repository
+
+The HTML site in `docs/` is generated by `tools/gen_docs.py` (stdlib-only)
+from `docs-src/*.md`. Edit the Markdown, run `make docs`, commit both — the
+sources are the single source of truth.
+
+## GitHub Pages
+
+The `docs/` folder is self-contained and designed to be served by GitHub
+Pages: repository Settings → Pages → deploy from branch `main`, directory
+`/docs`. No build workflow required.
+
+## Instrumentation in the runner
+
+The interactive runner takes environment switches — handy for agents even
+though the preview tool is preferred:
+
+- `ARIS_DUMP=N` — save the framebuffer as `dump_N.png` on frame N, then keep
+  running
+- `ARIS_DEBUG=1` — per-frame flush stats (vertex counts, atlas, px-range)
+
+---
+

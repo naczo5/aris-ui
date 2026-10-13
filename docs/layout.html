@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Layout — aris-ui</title>
+<meta name="description" content="aris-ui documentation — Layout">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
+  <nav>
+    <a href="getting-started.html">Getting Started</a><a href="core-concepts.html">Core Concepts</a><a href="widgets.html">Widgets</a><a href="layout.html">Layout</a><a href="rendering.html">Rendering</a><a href="fonts.html">Fonts</a><a href="agent-tooling.html">Agent Tooling</a>
+    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+  </nav>
+</header>
+<main class="site">
+<div class="toc">On this page — <a href="#panels">Panels</a> <a href="#rows-and-columns">Rows and columns</a> <a href="#styling-nodes-directly">Styling nodes directly</a> <a href="#one-frame-latency">One-frame latency</a></div>
+<h1>Layout</h1>
+<p>Layout is powered by a vendored Yoga (flexbox) tree, exposed through an RAII wrapper: <code>ui::LayoutNode</code>. You usually interact with it through panels and groups rather than nodes directly.</p>
+<h2 id="panels">Panels</h2>
+<p>A panel is an absolutely positioned root node with a title, padding, border and shadow. Panels are the <em>containers</em> of the retained layout tree — they are identified by string id and reused across frames.</p>
+<pre><code>
+ui::PanelStyle ps = ui::PanelStyle::FromTheme(ui::Theme::Default(), 18.f, &quot;Title&quot;);
+ctx.BeginPanel(&quot;main&quot;, ui::Rect(28, 28, 470, 640), ps);
+// ... declare rows, columns, widgets ...
+ctx.EndPanel();
+</code></pre>
+<ul>
+<li>- <code>Rect</code> is the on-screen position/size in pixels (y-down).</li>
+<li>- <code>PanelStyle::FromTheme(theme, padding, title)</code> derives the standard look;</li>
+<p>every field is overridable (colors, radii, shadow, title size).</p>
+<li>- <code>title</code> is optional; a <code>nullptr</code> title renders a borderless content panel.</li>
+</ul>
+<h2 id="rows-and-columns">Rows and columns</h2>
+<pre><code>
+ctx.BeginRow();          // horizontal flex container
+ctx.BeginColumn();       // vertical flex container inside a row
+// ... widgets stack inside ...
+ctx.EndGroup();          // closes the innermost open group
+ctx.EndGroup();
+</code></pre>
+<p><code>BeginRow()</code>/<code>BeginColumn()</code> are thin wrappers over <code>BeginGroup(bool row)</code>. Groups use <code>rowGap</code>/<code>columnGap</code> from the theme and stretch children by default. The demo runner builds a two-column panel exactly this way — see <code>examples/common/AppSupport.hpp::BuildDemoUi</code>.</p>
+<h2 id="styling-nodes-directly">Styling nodes directly</h2>
+<p>For custom layout behavior, use <code>ui::LayoutNode</code> (this is what the internals use):</p>
+<pre><code>
+ui::LayoutNode node;
+node.SetFlexDirection(YGFlexDirectionRow);
+node.SetGap(YGGutterColumn, 12.f);
+node.SetFlexGrow(1.f);
+node.SetPaddingAll(16.f);
+node.SetWidth(400.f);
+</code></pre>
+<p>Computed rects read back with <code>LayoutLeft/Top/Width/Height()</code> (parent-relative) or <code>ChildRect(parent)</code> for the absolute rect. The full Yoga style surface is wrapped: flex, grow/shrink, align, gaps, padding/margin/border per edge, min/max constraints, position type.</p>
+<h2 id="one-frame-latency">One-frame latency</h2>
+<p>Widget rects come from the <em>previous</em> frame&#x27;s layout. This is deliberate:</p>
+<ul>
+<li>- input hit-testing never depends on work done later in the same frame;</li>
+<li>- widgets can draw immediately with stable geometry;</li>
+<li>- the cost is a single frame of delay when a panel resizes or first appears.</li>
+</ul>
+<p>If you need a new panel to appear already laid out, declare it one frame before making it visible (or accept the one-frame pop — it&#x27;s imperceptible at overlay frame rates).</p>
+</main>
+<footer class="site">
+  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>Generated 2026-10-13 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+</footer>
+</body>
+</html>

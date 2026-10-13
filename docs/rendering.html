@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rendering — aris-ui</title>
+<meta name="description" content="aris-ui documentation — Rendering">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
+  <nav>
+    <a href="getting-started.html">Getting Started</a><a href="core-concepts.html">Core Concepts</a><a href="widgets.html">Widgets</a><a href="layout.html">Layout</a><a href="rendering.html">Rendering</a><a href="fonts.html">Fonts</a><a href="agent-tooling.html">Agent Tooling</a>
+    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+  </nav>
+</header>
+<main class="site">
+<div class="toc">On this page — <a href="#pipeline-per-frame">Pipeline per frame</a> <a href="#blend-contract">Blend contract</a> <a href="#shape-shader">Shape shader</a> <a href="#text-shader">Text shader</a> <a href="#clipping">Clipping</a> <a href="#notes-for-custom-backends">Notes for custom backends</a></div>
+<h1>Rendering</h1>
+<p>The renderer draws everything as signed-distance fields in a single GL 3.3 core pipeline. No textures for shapes, no geometry for corners — a quad per widget and a fragment shader that does the work.</p>
+<h2 id="pipeline-per-frame">Pipeline per frame</h2>
+<ol>
+<li>1. Widgets record POD commands into <code>ui::CommandQueue</code></li>
+<p>(<code>RoundedRect</code>, <code>Glyph</code>, <code>ClipPush</code>/<code>ClipPop</code>).</p>
+<li>2. <code>Batcher</code> expands each command into padded quads (96-byte interleaved</li>
+<p>vertices) and batches: one draw for all rects, one draw per atlas/font-size run for glyphs.</p>
+<li>3. <code>GlStateGuard</code> (RAII) saved the host&#x27;s state before the pass and restores</li>
+<p>it afterwards — program, VAO/VBO/IBO bindings, blend func + equation, cull/depth/scissor, viewport, texture bindings, active texture, pixel store.</p>
+</ol>
+<h2 id="blend-contract">Blend contract</h2>
+<p>The batcher <strong>owns</strong> blending for the UI pass and enables premultiplied alpha:</p>
+<pre><code>
+glEnable(GL_BLEND);
+glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
+                    GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+</code></pre>
+<p>Every fragment the shaders emit is premultiplied (shadow is pure black with alpha; fill/border/text are <code>rgb * a</code>). Host code that wants its state back gets exactly what it had.</p>
+<h2 id="shape-shader">Shape shader</h2>
+<p>Rounded rects are analytic SDFs with per-corner radii:</p>
+<ul>
+<li>- antialiased fill via <code>fwidth</code>-scaled <code>smoothstep</code></li>
+<li>- inner border of configurable width and color</li>
+<li>- soft drop shadow: the shadow SDF is the same rect offset by</li>
+<p><code>shadowOffset</code>, grown by <code>shadowSpread</code>, with a <code>±shadowBlur</code> falloff, multiplied by <code>shadowOpacity</code></p>
+</ul>
+<h2 id="text-shader">Text shader</h2>
+<p>Glyphs are MSDF (multi-channel signed distance fields) sampled from a single atlas texture:</p>
+<pre><code>
+float sd = median3(sample.rgb) - 0.5;
+float screenPxRange = /* atlas pxRange scaled to the current font size */;
+float alpha = clamp(sd * screenPxRange + 0.5, 0.0, 1.0);
+</code></pre>
+<p><code>screenPxRange</code> is derived per-fragment from <code>fwidth(uv)</code> so text stays crisp at any scale without regenerating anything.</p>
+<h2 id="clipping">Clipping</h2>
+<p><code>ClipPush</code>/<code>ClipPop</code> commands map to <code>glScissor</code> in y-down pixel coordinates. The queue tracks depth (max 32) and pairs pushes/pops; nested panels and text clipping compose naturally.</p>
+<h2 id="notes-for-custom-backends">Notes for custom backends</h2>
+<p>The command queue is pure data (see <code>include/ui/renderer/command_queue.hpp</code>) — replay it with anything. The GL batcher is a reference backend. The vertex format packs: rect (4f), radii (4f), color (4 x u8), border color (4 x u8), params (4f: border width, shadow spread, shadow blur, is-glyph), shadow (4f: offset xy, opacity, quad padding), uv (4f), position (2f).</p>
+</main>
+<footer class="site">
+  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>Generated 2026-10-13 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+</footer>
+</body>
+</html>

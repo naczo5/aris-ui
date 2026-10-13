@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Widgets — aris-ui</title>
+<meta name="description" content="aris-ui documentation — Widgets">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
+  <nav>
+    <a href="getting-started.html">Getting Started</a><a href="core-concepts.html">Core Concepts</a><a href="widgets.html">Widgets</a><a href="layout.html">Layout</a><a href="rendering.html">Rendering</a><a href="fonts.html">Fonts</a><a href="agent-tooling.html">Agent Tooling</a>
+    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+  </nav>
+</header>
+<main class="site">
+<div class="toc">On this page — <a href="#api">API</a> <a href="#visual-states">Visual states</a> <a href="#custom-widgets">Custom widgets</a> <a href="#theming">Theming</a></div>
+<h1>Widgets</h1>
+<p>All widgets are free functions taking the context first. They require an active panel (<code>BeginPanel</code>/<code>EndPanel</code>) because layout belongs to the Yoga tree. Every widget draws <em>and</em> handles input in the same call.</p>
+<pre><code>
+#include &quot;ui/widgets/widgets.hpp&quot;
+</code></pre>
+<h2 id="api">API</h2>
+<table>
+<tr><th>Function</th><th>Signature</th><th>Behavior</th></tr>
+<tr><td>Button</td><td><code>bool Button(Context&amp;, const char* label)</code></td><td>Returns true on the frame the click completes (press + release inside).</td></tr>
+<tr><td>Toggle</td><td><code>void Toggle(Context&amp;, const char* label, bool* value)</code></td><td>Flips <code>*value</code> when clicked; knob position eases via <code>valueT</code>.</td></tr>
+<tr><td>Slider</td><td><code>void Slider(Context&amp;, const char* label, float* value, float minValue, float maxValue)</code></td><td>Updates <code>*value</code> while dragged; shows a right-aligned value label.</td></tr>
+<tr><td>Label</td><td><code>void Label(Context&amp;, const char* text, Color color = {}, float fontSize = 0.f)</code></td><td>Static text; <code>fontSize = 0</code> uses the theme default.</td></tr>
+</table>
+<h2 id="visual-states">Visual states</h2>
+<p>Colors and shadows ease through <code>WidgetStateStore</code> — buttons lift on hover (<code>hoverT</code>) and settle when pressed (<code>pressT</code>), toggles slide their knob with <code>valueT</code>. The states are frame-rate independent (exponential smoothing), so animations look identical at 60 or 240 fps.</p>
+<table>
+<tr><th>State</th><th>Fill</th><th>Shadow</th></tr>
+<tr><td>idle</td><td><code>accent</code></td><td>opacity 0.18, offset (0,2)</td></tr>
+<tr><td>hover</td><td><code>accentHover</code></td><td>opacity 0.32, offset (0,5)</td></tr>
+<tr><td>press</td><td><code>accentActive</code></td><td>opacity 0.08, offset (0,2)</td></tr>
+</table>
+<p>You can inspect a widget&#x27;s eased state yourself via <code>ctx.theme()</code> + <code>WidgetStateStore</code> if you build custom controls.</p>
+<h2 id="custom-widgets">Custom widgets</h2>
+<p>Custom controls are just immediate-mode code using the primitives:</p>
+<pre><code>
+void ColorDot(ui::Context&amp; ctx, ui::Color color) {
+    ui::WidgetFrame w = ctx.BeginWidget(&quot;dot&quot;, 20.f);
+    if (w.rect.Valid()) {
+        ui::RectStyle st;
+        st.fill = color;
+        st.cornerRadii = ui::Vec4(10.f);
+        ctx.DrawRect(w.rect, st);
+    }
+    ctx.EndWidget();
+}
+</code></pre>
+<p><code>BeginWidget(label, height)</code> creates a full-width flexbox row of the given height inside the current panel and returns a frame with <code>rect</code> (valid from the previous frame&#x27;s layout) and <code>state</code> (the retained <code>WidgetState</code>).</p>
+<h2 id="theming">Theming</h2>
+<p>Everything visual is a token in <code>ui::Theme</code> (see <code>include/ui/core/theme.hpp</code>). Set a custom theme with <code>ctx.SetTheme(theme)</code> before the first frame.</p>
+<table>
+<tr><th>Token</th><th>Default</th><th>Purpose</th></tr>
+<tr><td><code>panelBg</code></td><td><code>0x15191F</code></td><td>Panel surface</td></tr>
+<tr><td><code>panelBorder</code></td><td><code>0x2A3038</code></td><td>Panel hairline</td></tr>
+<tr><td><code>text</code> / <code>textDim</code></td><td><code>0xE6EDF3</code> / <code>0x8B949E</code></td><td>Primary / secondary text</td></tr>
+<tr><td><code>accent</code></td><td><code>0x7C5CFF</code></td><td>Interactive fill (buttons, active toggle, slider fill)</td></tr>
+<tr><td><code>accentHover</code> / <code>accentActive</code></td><td><code>0x9277FF</code> / <code>0x6A4CE0</code></td><td>Hover / pressed accent</td></tr>
+<tr><td><code>controlBg</code>, <code>controlBorder</code>, <code>trackBg</code></td><td>dark greys</td><td>Inactive control surfaces</td></tr>
+<tr><td><code>panelRadius</code> / <code>controlRadius</code></td><td>12 / 8 px</td><td>Corner radii</td></tr>
+<tr><td><code>shadowOffset</code> / <code>shadowBlur</code> / <code>shadowOpacity</code></td><td>(0,6) / 16 / 0.28</td><td>Panel shadow</td></tr>
+<tr><td><code>fontSize</code> / <code>rowGap</code> / <code>columnGap</code> / <code>controlHeight</code></td><td>15 / 10 / 12 / 34 px</td><td>Spacing metrics</td></tr>
+</table>
+<p>Previews of every state live in the repo: run <code>make preview</code> and read <code>previews/buttons.png</code>, <code>previews/buttons-hover.png</code>, <code>previews/buttons-press.png</code>, <code>previews/toggles.png</code>, <code>previews/sliders.png</code>.</p>
+</main>
+<footer class="site">
+  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>Generated 2026-10-13 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+</footer>
+</body>
+</html>

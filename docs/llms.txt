@@ -1,0 +1,20 @@
+# aris-ui
+
+> A modern C++20 immediate-mode UI toolkit for OpenGL overlay injection:
+> SDF-rendered widgets, MSDF font atlases, Yoga flexbox layout, and a
+> headless preview/test toolchain designed for AI coding agents.
+
+## Docs
+
+- [Getting Started](./getting-started.html): Getting Started documentation for aris-ui
+- [Core Concepts](./core-concepts.html): Core Concepts documentation for aris-ui
+- [Widgets](./widgets.html): Widgets documentation for aris-ui
+- [Layout](./layout.html): Layout documentation for aris-ui
+- [Rendering](./rendering.html): Rendering documentation for aris-ui
+- [Fonts](./fonts.html): Fonts documentation for aris-ui
+- [Agent Tooling](./agent-tooling.html): Agent Tooling documentation for aris-ui
+
+## Machine-readable
+
+- [llms-full.txt](llms-full.txt): this entire documentation set in one file
+- Markdown sources live in `docs-src/` inside the repository

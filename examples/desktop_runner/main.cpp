@@ -9,6 +9,7 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include "common/AppSupport.hpp"
 #include "ui/aris_ui.hpp"
 #include "atlas_generator/atlas_gen.hpp"
 
@@ -102,26 +103,6 @@ struct Pass {
 
 } // namespace hostbg
 
-// ---------------------------------------------------------------------------
-static std::string FindSystemFont() {
-    namespace fs = std::filesystem;
-    const char* candidates[] = {
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/TTF/Inter-Regular.ttf",
-        "/usr/share/fonts/inter/Inter-Regular.ttf",
-        "/usr/share/fonts/ttf-jetbrains-mono/JetBrainsMono-Regular.ttf",
-        "/usr/share/fonts/TTF/JetBrainsMono-Regular.ttf",
-        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-    };
-    for (const char* c : candidates) {
-        std::error_code ec;
-        if (fs::exists(c, ec)) return c;
-    }
-    return {};
-}
-
 struct FrameInput {
     std::vector<ui::InputEvent> events;
     double mouseX = 0, mouseY = 0;
@@ -165,78 +146,6 @@ static void ErrorCallback(int, const char* msg) {
 }
 
 // ---------------------------------------------------------------------------
-// Demo UI: two-column flexbox panel (Yoga) exercising the widget set and the
-// SDF renderer (live radius / shadow / opacity sliders drive the preview card).
-// ---------------------------------------------------------------------------
-static void BuildDemoUi(ui::Context& ctx, int& clicks, bool& esp, bool& glow,
-                        float& opacity, float& radius, float& shadow) {
-    const ui::Theme& th = ui::Theme::Default();
-    const ui::PanelStyle panelStyle = ui::PanelStyle::FromTheme(th, 18.f, "ARIS UI — SDF panel");
-
-    ctx.BeginPanel("main", ui::Rect(28, 28, 470, 640), panelStyle);
-
-    ui::Label(ctx, "Modern game overlay toolkit", th.textDim, 13.f);
-
-    ctx.BeginRow();
-    {
-        // --- column 1: controls ---
-        ctx.BeginColumn();
-        ui::Label(ctx, "Controls", th.text, 14.f);
-        if (ui::Button(ctx, "Click me")) ++clicks;
-        {
-            static std::string clicksText;
-            clicksText = "Clicks: " + std::to_string(clicks);
-            ui::Label(ctx, clicksText.c_str(), th.textDim, 13.f);
-        }
-        ui::Toggle(ctx, "ESP", &esp);
-        ui::Toggle(ctx, "Glow", &glow);
-        ui::Slider(ctx, "Opacity", &opacity, 0.f, 1.f);
-        ui::Slider(ctx, "Corner radius", &radius, 0.f, 28.f);
-        ui::Slider(ctx, "Shadow", &shadow, 0.f, 1.f);
-        ctx.EndGroup();
-
-        // --- column 2: live preview ---
-        ctx.BeginColumn();
-        ui::Label(ctx, "Preview", th.text, 14.f);
-        ui::WidgetFrame w = ctx.BeginWidget("__preview", 210.f);
-        if (w.rect.Valid()) {
-            const ui::Rect inner = w.rect.Inset(2.f);
-            // card with live-driven SDF parameters
-            ui::RectStyle st;
-            st.fill = ui::Color::Hex(0x1C2128, (std::uint8_t)(opacity * 255.f));
-            st.cornerRadii = ui::Vec4(radius);
-            st.borderColor = th.controlBorder;
-            st.borderWidth = 1.f;
-            st.shadowOffset = ui::Vec2(0.f, 10.f);
-            st.shadowBlur = 24.f;
-            st.shadowOpacity = shadow;
-            ctx.DrawRect(inner, st);
-
-            // accent pill inside the card
-            ui::RectStyle pill;
-            pill.fill = th.accent;
-            pill.cornerRadii = ui::Vec4(12.f);
-            pill.shadowOffset = ui::Vec2(0.f, 4.f);
-            pill.shadowBlur = 12.f;
-            pill.shadowOpacity = 0.35f * shadow;
-            ctx.DrawRect(ui::Rect(inner.x + 14.f, inner.y + 16.f, 120.f, 24.f), pill);
-
-            const char* line = "Rounded rect rendered";
-            ui::Vec2 ts = ctx.MeasureText(line, 13.f);
-            ctx.DrawText(ui::Vec2(inner.x + 14.f, inner.y + 56.f), line, th.textDim, 13.f, &inner);
-            const char* line2 = "entirely in a fragment shader";
-            ctx.DrawText(ui::Vec2(inner.x + 14.f, inner.y + 56.f + 18.f), line2, th.textDim, 13.f, &inner);
-            (void)ts;
-        }
-        ctx.EndWidget();
-        ctx.EndGroup();
-    }
-    ctx.EndGroup();
-
-    ctx.EndPanel();
-}
-
-// ---------------------------------------------------------------------------
 int main(int argc, char** argv) {
     glfwSetErrorCallback(ErrorCallback);
     if (!glfwInit()) return 1;
@@ -258,16 +167,14 @@ int main(int argc, char** argv) {
     }
 
     // --- font + atlas (offline generation, cached) ---
-    std::string fontPath = argc > 1 ? argv[1] : FindSystemFont();
+    std::string fontPath = argc > 1 ? argv[1] : aris_demo::FindSystemFont();
     if (fontPath.empty()) {
         std::fprintf(stderr, "no system font found; pass one: aris_runner <font.ttf>\n");
         return 1;
     }
-    std::filesystem::create_directories("atlas");
     const std::string prefix = "atlas/ui";
-    ui_atlas::Params params;
     std::string err;
-    if (!ui_atlas::GenerateAndWrite(fontPath, prefix, params, err)) {
+    if (!aris_demo::BootstrapAtlas(fontPath, prefix, err)) {
         std::fprintf(stderr, "atlas generation failed: %s\n", err.c_str());
         return 1;
     }
@@ -285,12 +192,7 @@ int main(int argc, char** argv) {
     glfwSetKeyCallback(window, KeyCallback);
 
     // demo state
-    int clicks = 0;
-    bool esp = true;
-    bool glow = false;
-    float opacity = 0.85f;
-    float radius = 18.f;
-    float shadow = 0.45f;
+    aris_demo::DemoState demo;
 
     double lastTime = glfwGetTime();
     double fpsTimer = lastTime;
@@ -329,7 +231,7 @@ int main(int argc, char** argv) {
         }
         (void)blockedAny;
 
-        BuildDemoUi(ctx, clicks, esp, glow, opacity, radius, shadow);
+        aris_demo::BuildDemoUi(ctx, demo);
 
         ctx.Render();
 

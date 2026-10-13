@@ -1,12 +1,13 @@
 # aris-ui
 
-A lightweight, modern, drop-in C++ UI library — an aesthetic alternative to Dear ImGui
-for game injection and overlay rendering, with a primary focus on Minecraft (1.8.9 through
-modern releases) and other OpenGL-based applications.
+**A more beautiful ImGui replacement. Optimised for agents.**
 
-Hardware-antialiased rounded corners, drop shadows, smooth animations and crisp typography
-via a Multi-channel Signed Distance Field (MSDF) font pipeline — all rendered natively on
-the GPU instead of through a multi-megabyte embedded web engine.
+A lightweight, modern, drop-in C++20 immediate-mode UI library for OpenGL overlay
+injection — Minecraft (1.8.9 through modern releases) and any other OpenGL-based
+application. Renders widgets as analytically anti-aliased signed-distance fields, draws
+text from offline-generated MSDF atlases, lays out panels with Yoga flexbox, and leaves
+the host's OpenGL state exactly as it found it. No web engine, no resource hogging, no
+sloppy defaults.
 
 ## Tenets
 
@@ -23,13 +24,20 @@ the GPU instead of through a multi-megabyte embedded web engine.
 3. **Fast standalone development loop.** A GLFW + OpenGL desktop runner for rapid
    prototyping without a running game or debugger injection.
 
-## Quick start (desktop runner)
+## Quick start
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-./build/examples/desktop_runner/aris_runner
+git clone <repo> aris-ui && cd aris-ui
+make configure        # = cmake -S . -B build -DARIS_UI_BUILD_TESTS=ON
+make build            # = cmake --build build
+make test             # unit tests (ctest)
+make preview          # headless UI snapshots → previews/*.png
+make demo             # interactive desktop runner window
 ```
+
+The runner renders the canonical demo UI: rounded SDF panels, animated buttons,
+toggles and sliders, MSDF text. For a pixel-accurate preview of every widget without
+opening a window, `make preview` writes PNG snapshots you can view directly.
 
 ## Minimal usage (host integration)
 
@@ -53,6 +61,22 @@ ctx.EndPanel();
 
 ctx.Render();   // flushes the command queue through the GL backend
 ```
+
+## For agents (and humans who think like them)
+
+- **[AGENTS.md](AGENTS.md)** — repo map, verification loop, and known gotchas.
+- **`make preview`** — deterministic headless snapshots (`examples/scene_preview`,
+  8 named scenes with simulated hover/press input) → `previews/*.png`. Render,
+  then *look* at the PNGs.
+- **`make test`** — 30 unit tests via ctest, no external test framework.
+- **`docs/llms.txt`** and **`docs/llms-full.txt`** — agent-oriented doc indexes;
+  every docs page also has a raw markdown source in `docs-src/`.
+
+## Documentation
+
+Full docs live in [`docs/`](docs/index.html) (GitHub Pages–ready) and as markdown in
+[`docs-src/`](docs-src/): getting started, core concepts, widgets, layout, rendering,
+fonts, agent tooling.
 
 ## Repository layout
 

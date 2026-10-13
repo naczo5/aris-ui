@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Core Concepts — aris-ui</title>
+<meta name="description" content="aris-ui documentation — Core Concepts">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <a class="logo" href="index.html">aris-ui<span class="dot">.</span></a>
+  <nav>
+    <a href="getting-started.html">Getting Started</a><a href="core-concepts.html">Core Concepts</a><a href="widgets.html">Widgets</a><a href="layout.html">Layout</a><a href="rendering.html">Rendering</a><a href="fonts.html">Fonts</a><a href="agent-tooling.html">Agent Tooling</a>
+    <a href="https://github.com/OWNER/aris-ui">GitHub</a>
+  </nav>
+</header>
+<main class="site">
+<div class="toc">On this page — <a href="#the-frame-lifecycle">The frame lifecycle</a> <a href="#events">Events</a> <a href="#retained-state">Retained state</a> <a href="#widget-ids">Widget IDs</a> <a href="#drawing-primitives">Drawing primitives</a> <a href="#command-queue">Command queue</a> <a href="#what-the-library-does-not-do">What the library does NOT do</a></div>
+<h1>Core Concepts</h1>
+<p>aris-ui follows an immediate-mode <em>API over retained state</em> model: your code declares the UI every frame like Dear ImGui, while the library retains the expensive parts (widget state, Yoga layout tree, GPU batches) between frames.</p>
+<h2 id="the-frame-lifecycle">The frame lifecycle</h2>
+<pre><code>
+ctx.BeginFrame(dt, width, height);   // clock, mouse, hot-widget recomputation
+ctx.ProcessInput(event);             // feed translated host events (optional, per event)
+// ... declare your UI with BeginPanel / widgets / DrawText / DrawRect ...
+ctx.Render();                        // run layout, flush draw commands to GL
+</code></pre>
+<ul>
+<li>- <code>BeginFrame</code> rolls the rect registry: rects computed last frame drive input</li>
+<p>and drawing this frame (<strong>one-frame latency</strong> — an egui-style tradeoff that keeps layout and hit-testing decoupled).</p>
+<li>- <code>ProcessInput</code> returns <code>true</code> when the UI consumed an event (e.g. a click on</li>
+<p>a widget). Consume policy: the UI blocks events that hit interactive widgets, everything else passes through to the host.</p>
+<li>- <code>Render</code> runs the Yoga layout pass, resolves widget rects, and replays the</li>
+<p>recorded command queue through the batcher.</p>
+</ul>
+<h2 id="events">Events</h2>
+<p>The host translates platform input into a <code>std::variant</code>:</p>
+<pre><code>
+using InputEvent = std::variant&lt;
+    MouseMoveEvent,      // Vec2 pos
+    MouseButtonEvent,    // button, pressed, pos
+    MouseScrollEvent,    // delta, pos
+    KeyEvent,            // key code, pressed, repeat
+    TextInputEvent&gt;;     // codepoint
+</code></pre>
+<p>Mouse coordinates are in the same pixel space the UI is drawn in (y-down, origin top-left). There is no inversion, no scaling — translate 1:1.</p>
+<h2 id="retained-state">Retained state</h2>
+<p><code>WidgetStateStore</code> keeps one <code>WidgetState</code> per widget ID (FNV-1a hash of the label + the ID stack):</p>
+<pre><code>
+struct WidgetState {
+    float hoverT;      // eased 0..1 hover amount
+    float pressT;      // eased 0..1 press amount
+    float valueT;      // widget value (e.g. toggle knob position)
+};
+</code></pre>
+<p>Targets are set by widgets each frame; <code>Advance()</code> eases them with a frame-rate-independent exponential filter (<code>ExpSmooth</code>, ~14/s for hover, ~22/s for press). Un-touched states are garbage-collected after 240 frames.</p>
+<h2 id="widget-ids">Widget IDs</h2>
+<p>IDs are derived from the string label combined with the container ID stack, so identical labels in different panels never collide. Hashing is deterministic (FNV-1a 64, tested against published reference vectors).</p>
+<h2 id="drawing-primitives">Drawing primitives</h2>
+<p>You rarely need these, but they are the public surface everything else uses:</p>
+<pre><code>
+ctx.DrawRect(const Rect&amp; rect, const RectStyle&amp; style);
+ctx.DrawText(Vec2 pos, std::string_view utf8, const Color&amp; color,
+             float fontSize, const Rect* clipRect = nullptr);
+Vec2 ctx.MeasureText(std::string_view utf8, float fontSize) const;
+</code></pre>
+<p><code>RectStyle</code> packs fill, per-corner radii, border and a soft drop shadow (offset / spread / blur / opacity). <code>DrawText</code> decodes UTF-8, walks glyph quads, and clips against <code>clipRect</code> (passing your panel content rect is the convention).</p>
+<h2 id="command-queue">Command queue</h2>
+<p><code>ctx.Render()</code> first records a frame&#x27;s worth of POD commands (<code>RoundedRect</code>, <code>Glyph</code>, <code>ClipPush</code>/<code>ClipPop</code>) into a <code>ui::CommandQueue</code>, then replays them through the OpenGL batcher. The queue is pure data — you can inspect it headlessly (the test suite does exactly that) or replay it with your own backend later.</p>
+<h2 id="what-the-library-does-not-do">What the library does NOT do</h2>
+<ul>
+<li>- No windowing, no threading, no buffer swapping — the host owns the loop.</li>
+<li>- No global state, no singletons: one <code>ui::Context</code> per process, pass it around.</li>
+<li>- No rendering beyond GL 3.3 core today (older variants are roadmap Stage 10).</li>
+</ul>
+</main>
+<footer class="site">
+  <span>aris-ui — MIT licensed. Dark pixels, calm forestry, zero gradients.</span>
+  <span>Generated 2026-10-13 · <a href="https://github.com/OWNER/aris-ui">source</a></span>
+</footer>
+</body>
+</html>

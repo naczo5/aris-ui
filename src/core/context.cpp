@@ -370,18 +370,7 @@ void Context::DrawText(Vec2 pos, std::string_view text, const Color& color, floa
             }
             if (visible) {
                 const float guv[4] = {g->u0, g->v0, g->u1, g->v1};
-                if (weight > 0.f) {
-                    // Faux bold: stamp the glyph twice, half a weight apart.
-                    // (Shifting the SDF threshold instead exposes MSDF
-                    // channel artifacts, so only thinning uses the shader.)
-                    Rect a = quad, b = quad;
-                    a.x -= weight * 0.5f;
-                    b.x += weight * 0.5f;
-                    queue_.PushGlyph(a, guv, color, font_->TextureId(), fontSize, 0.f);
-                    queue_.PushGlyph(b, guv, color, font_->TextureId(), fontSize, 0.f);
-                } else {
-                    queue_.PushGlyph(quad, guv, color, font_->TextureId(), fontSize, weight);
-                }
+                queue_.PushGlyph(quad, guv, color, font_->TextureId(), fontSize, weight);
             }
         }
         penX += g->advance * fontSize;

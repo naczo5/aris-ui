@@ -8,6 +8,11 @@
 #include <fstream>
 #include <sstream>
 
+#if defined(ARIS_UI_HAS_ATLASGEN)
+#include "atlas_generator/atlas_gen.hpp"
+#include <filesystem>
+#endif
+
 namespace ui {
 
 using json = nlohmann::json;
@@ -89,6 +94,35 @@ bool FontAtlas::Load(const std::string& pngPath, const std::string& jsonPath) {
         glyphs_[g.at("codepoint").get<std::uint32_t>()] = info;
     }
     return true;
+}
+
+bool FontAtlas::LoadTtf(const std::string& ttfPath, const std::string& cachePrefix,
+                        float fontSize, float pxRange) {
+#if defined(ARIS_UI_HAS_ATLASGEN)
+    namespace fs = std::filesystem;
+    std::string prefix = cachePrefix;
+    if (prefix.empty()) {
+        fs::path p(ttfPath);
+        std::string stem = p.stem().string();
+        prefix = "atlas/" + stem;
+    }
+    std::error_code ec;
+    fs::create_directories(fs::path(prefix).parent_path(), ec);
+    ui_atlas::Params params;
+    params.fontSize = fontSize;
+    params.pxRange = pxRange;
+    std::string err;
+    if (!ui_atlas::GenerateAndWrite(ttfPath, prefix, params, err)) {
+        std::fprintf(stderr, "[aris-ui] FontAtlas::LoadTtf: failed to build atlas for %s: %s\n",
+                     ttfPath.c_str(), err.c_str());
+        return false;
+    }
+    return Load(prefix + ".png", prefix + ".json");
+#else
+    (void)ttfPath; (void)cachePrefix; (void)fontSize; (void)pxRange;
+    std::fprintf(stderr, "[aris-ui] FontAtlas::LoadTtf: atlas generator not enabled (requires ARIS_UI_BUILD_TOOLS=ON)\n");
+    return false;
+#endif
 }
 
 void FontAtlas::Unload() {

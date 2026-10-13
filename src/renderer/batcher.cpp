@@ -120,6 +120,7 @@ void main() {
 #endif
         vec3 msdf = texture(uTex, vGlyphUv).rgb;
         float sd = median3(msdf) - 0.5;
+        if (sd <= -0.42) discard;
         float screenPxDistance = screenPxRange() * sd;
         // vParams.x = embolden weight in screen px (negative thins the glyph)
         float alpha = clamp(screenPxDistance + 0.5 + vParams.x, 0.0, 1.0);

@@ -29,31 +29,7 @@ add_library(nlohmann_json INTERFACE)
 target_include_directories(nlohmann_json INTERFACE third_party)
 
 # ---------------------------------------------------------------------------
-# aris-ui core library (core engine + layout + OpenGL backend)
-# ---------------------------------------------------------------------------
-add_library(aris-ui STATIC
-    src/core/context.cpp
-    src/core/theme.cpp
-    src/renderer/command_queue.cpp
-    src/renderer/batcher.cpp
-    src/renderer/gl_state_guard.cpp
-    src/font/font_atlas.cpp
-    src/widgets/widgets.cpp
-    src/widgets/icons.cpp
-    src/widgets/kit.cpp
-)
-target_include_directories(aris-ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(aris-ui
-    PUBLIC  yogacore
-    PRIVATE glad stb nlohmann_json
-)
-target_compile_definitions(aris-ui PRIVATE
-    STB_IMAGE_IMPLEMENTATION
-    STB_IMAGE_WRITE_IMPLEMENTATION
-)
-
-# ---------------------------------------------------------------------------
-# Tools: offline MSDF atlas generator (FreeType + vendored msdfgen)
+# Tools & Atlas Generator (FreeType + vendored msdfgen)
 # ---------------------------------------------------------------------------
 if (ARIS_UI_BUILD_TOOLS)
     set(MSDFGEN_USE_VCPKG        OFF CACHE BOOL "" FORCE)
@@ -79,6 +55,34 @@ if (ARIS_UI_BUILD_TOOLS)
 
     add_executable(atlasgen tools/atlas_generator/main.cpp)
     target_link_libraries(atlasgen PRIVATE aris-atlasgen)
+endif()
+
+# ---------------------------------------------------------------------------
+# aris-ui core library (core engine + layout + OpenGL backend)
+# ---------------------------------------------------------------------------
+add_library(aris-ui STATIC
+    src/core/context.cpp
+    src/core/theme.cpp
+    src/renderer/command_queue.cpp
+    src/renderer/batcher.cpp
+    src/renderer/gl_state_guard.cpp
+    src/font/font_atlas.cpp
+    src/widgets/widgets.cpp
+    src/widgets/icons.cpp
+    src/widgets/kit.cpp
+)
+target_include_directories(aris-ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(aris-ui
+    PUBLIC  yogacore
+    PRIVATE glad stb nlohmann_json
+)
+target_compile_definitions(aris-ui PRIVATE
+    STB_IMAGE_IMPLEMENTATION
+)
+if (ARIS_UI_BUILD_TOOLS)
+    target_include_directories(aris-ui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+    target_link_libraries(aris-ui PRIVATE aris-atlasgen)
+    target_compile_definitions(aris-ui PRIVATE ARIS_UI_HAS_ATLASGEN=1)
 endif()
 
 # ---------------------------------------------------------------------------

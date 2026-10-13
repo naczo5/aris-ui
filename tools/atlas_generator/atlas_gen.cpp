@@ -104,6 +104,7 @@ bool Generate(const std::string& fontPath, const Params& params, Result& out, st
         if (!msdfgen::loadGlyph(shape, font, cp, msdfgen::FONT_SCALING_EM_NORMALIZED, &advance)) {
             return false;   // glyph missing in font — skip silently
         }
+        shape.normalize();
         shape.orientContours();
 
         GlyphResult result;
@@ -152,22 +153,27 @@ bool Generate(const std::string& fontPath, const Params& params, Result& out, st
 
         msdfgen::Bitmap<float, 3> msdf(bw, bh);
         msdfgen::generateMSDF(msdf, shape, projection, range);
+        msdfgen::distanceSignCorrection(msdf, shape, projection, msdfgen::FILL_NONZERO);
+        msdfgen::msdfErrorCorrection(msdf, shape, projection, range);
 
         // Stage the bitmap; blitting happens after ALL placements so the atlas
         // stride matches the packer's final size (the packer may grow mid-run,
         // and blitting early would corrupt rows for glyphs packed before that).
         staged.push_back(StagedGlyph{place, bw, bh, std::move(msdf)});
 
-        result.plane[0] = bounds.l; result.plane[1] = bounds.b;
-        result.plane[2] = bounds.r; result.plane[3] = bounds.t;
-        // atlasBounds = ink rectangle in atlas pixels (NOT the padded cell):
-        // the ink sits exactly at (margin, margin) inside the cell (PNG top-down),
-        // and its size is the unrounded plane extents in atlas px. This lets the
-        // runtime map planeBounds 1:1 onto the sampled uv rect.
-        result.atlas[0] = place.x + margin;                      // ink left (px)
-        result.atlas[1] = place.y + margin;                      // ink top (px, PNG coords)
-        result.atlas[2] = static_cast<float>((bounds.r - bounds.l) * fs);  // ink w (px)
-        result.atlas[3] = static_cast<float>((bounds.t - bounds.b) * fs);  // ink h (px)
+        // Standard msdf-atlas-gen bounds:
+        // planeBounds represents the em-normalized quad covering the ENTIRE
+        // padded cell (including the distance field margin).
+        // atlasBounds represents the exact pixel rectangle of that cell in the PNG.
+        result.plane[0] = static_cast<double>(bounds.l) - static_cast<double>(margin) / fs;
+        result.plane[1] = static_cast<double>(bounds.b) - static_cast<double>(margin) / fs;
+        result.plane[2] = result.plane[0] + static_cast<double>(bw) / fs;
+        result.plane[3] = result.plane[1] + static_cast<double>(bh) / fs;
+
+        result.atlas[0] = static_cast<double>(place.x);
+        result.atlas[1] = static_cast<double>(place.y);
+        result.atlas[2] = static_cast<double>(bw);
+        result.atlas[3] = static_cast<double>(bh);
         out.glyphs.push_back(result);
         return true;
     };

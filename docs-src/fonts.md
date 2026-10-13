@@ -1,14 +1,49 @@
 # Fonts
 
-Text is rendered from offline-generated MSDF atlases. At runtime you load a
-PNG + JSON pair — no font parsing, no FreeType dependency in the shipped app.
+Text is rendered using Multi-channel Signed Distance Field (MSDF) vector atlases. `aris-ui` supports two loading workflows:
+1. **Direct TTF / OTF loading with automatic caching (`FontAtlas::LoadTtf`)**: Drop in any TrueType/OpenType font (including Google Fonts like Inter, Roboto, or JetBrains Mono) with one function call.
+2. **Zero-dependency runtime loading (`FontAtlas::Load`)**: Load pre-baked PNG + JSON atlases with no FreeType dependency in shipped game injection overlays.
 
-## Generating an atlas
+## Loading Custom Fonts (.ttf / .otf / Google Fonts)
+
+You can load any TrueType or OpenType font directly. If the cached atlas files already exist and are up to date, `aris-ui` loads them instantly from disk; otherwise, it generates and caches the MSDF atlas automatically:
+
+```cpp
+ui::FontAtlas font;
+
+// 1. One-line loading: automatically generates & caches under atlas/Inter
+font.LoadTtf("assets/fonts/Inter.ttf");
+
+// 2. Specify a custom cache prefix or generation parameters:
+font.LoadTtf("fonts/Roboto-Bold.ttf", "atlas/roboto_bold", /*fontSize=*/48.f, /*pxRange=*/4.f);
+
+ctx.SetFont(&font);
+```
+
+### Fetching Google Fonts
+
+A CLI helper script `./tools/fetch_font.sh` is included to download any Google Font directly into `assets/fonts/`:
+
+```sh
+# Download standard Google Fonts by name:
+./tools/fetch_font.sh Inter
+./tools/fetch_font.sh Roboto
+./tools/fetch_font.sh "JetBrains Mono"
+
+# Or download from any custom URL:
+./tools/fetch_font.sh https://example.com/MyFont.ttf
+```
+
+`aris-ui` comes bundled out-of-the-box with clean static TrueType builds of **Inter** (`assets/fonts/Inter.ttf`, `Inter-Regular.ttf`, `Inter-Bold.ttf`).
+
+## Generating an atlas offline
+
+For stripped-down game injection clients without FreeType:
 
 From the CLI (built as `build/atlasgen`):
 
 ```sh
-./build/atlasgen /usr/share/fonts/TTF/DejaVuSans.ttf atlas/ui
+./build/atlasgen assets/fonts/Inter.ttf atlas/ui
 ```
 
 Or from code:
@@ -19,16 +54,16 @@ params.fontSize = 48.f;         // reference px size (em-normalization basis)
 params.pxRange  = 4.f;          // MSDF distance range in atlas pixels
 params.firstCodepoint = 32;     // default: printable ASCII
 params.lastCodepoint  = 126;
-params.extraChars = "\xC3\x97\xE2\x80\x94";   // UTF-8 extras (×, —)
+params.extraChars = "\xC3\x97\xE2\x80\x94\xE2\x9C\x93";   // UTF-8 extras (×, —, ✓)
 
 std::string err;
-ui_atlas::GenerateAndWrite("font.ttf", "atlas/ui", params, err);
+ui_atlas::GenerateAndWrite("assets/fonts/Inter.ttf", "atlas/ui", params, err);
 ```
 
 `GenerateAndWrite` caches: outputs are regenerated only when the PNG is older
 than the font file. Delete the pair after changing generator code.
 
-## Runtime loading
+## Runtime loading (Zero FreeType Dependency)
 
 ```cpp
 ui::FontAtlas font;

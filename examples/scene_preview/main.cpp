@@ -110,12 +110,13 @@ void DrawSwissButton(ui::Context& ctx, const char* id, const ui::Rect& r,
     const ui::Vec2 ts = ctx.MeasureText(label, fs);
     const float tw = ts.x + (icon != ui::Icon::Count ? 24.f : 0.f);
     float startX = rect.Center().x - tw * 0.5f;
+    const float textY = cy - ts.y * 0.5f;
 
     if (icon != ui::Icon::Count) {
         ui::DrawIcon(ctx, icon, ui::Rect(startX, cy - 8.f, 16.f, 16.f), curText, 2.0f);
         startX += 24.f;
     }
-    ctx.DrawText(ui::Vec2(startX, cy - 8.f), label, curText, fs, nullptr, 0.45f);
+    ctx.DrawText(ui::Vec2(startX, textY), label, curText, fs, nullptr, 0.0f);
 }
 
 void BuildSwissButtonsUi(ui::Context& ctx, int forceState = 0) {
@@ -146,17 +147,22 @@ void BuildSwissButtonsUi(ui::Context& ctx, int forceState = 0) {
     ctx.DrawRect(card, cs);
 
     // Header bar
-    ctx.DrawText(ui::Vec2(card.x + 18.f, card.y + 16.f), "SWISS DESIGN // SYS-01",
-                 ui::Color::Hex(0x111111), 14.f, nullptr, 0.5f);
+    ctx.DrawText(ui::Vec2(card.x + 18.f, card.y + 14.f), "SWISS DESIGN // SYS-01",
+                 ui::Color::Hex(0x111111), 14.f, nullptr, 0.0f);
 
-    // Tag pill with generous padding
-    const ui::Rect pill(card.Max().x - 134.f, card.y + 12.f, 116.f, 22.f);
+    // Tag pill with generous, balanced padding
+    const float pillFs = 10.5f;
+    const ui::Vec2 pillTs = ctx.MeasureText("V-2.4 // STABLE", pillFs);
+    const float pillW = pillTs.x + 22.f;
+    const float pillH = 22.f;
+    const ui::Rect pill(card.Max().x - pillW - 16.f, card.y + 10.f, pillW, pillH);
     ui::RectStyle ps;
     ps.fill = ui::Color::Hex(0xF4F1EA);
     ps.borderColor = ui::Color::Hex(0x111111);
     ps.borderWidth = 1.5f;
     ctx.DrawRect(pill, ps);
-    ctx.DrawText(ui::Vec2(pill.x + 10.f, pill.y + 5.f), "V-2.4 // STABLE", ui::Color::Hex(0x111111), 10.5f, nullptr, 0.35f);
+    const float pillTextY = pill.Center().y - pillTs.y * 0.5f;
+    ctx.DrawText(ui::Vec2(pill.Center().x - pillTs.x * 0.5f, pillTextY), "V-2.4 // STABLE", ui::Color::Hex(0x111111), pillFs, nullptr, 0.0f);
 
     ctx.DrawLine(ui::Vec2(card.x, card.y + 42.f), ui::Vec2(card.Max().x, card.y + 42.f), 2.f, ui::Color::Hex(0x111111));
 
@@ -200,7 +206,7 @@ void BuildSwissButtonsUi(ui::Context& ctx, int forceState = 0) {
     float chipX = card.x + 20.f;
     for (const char* ch : chips) {
         const ui::Vec2 cs2 = ctx.MeasureText(ch, 11.5f);
-        ctx.DrawText(ui::Vec2(chipX, fy + 2.f), ch, ui::Color::Hex(0x18181B), 11.5f, nullptr, 0.25f);
+        ctx.DrawText(ui::Vec2(chipX, fy + 2.f), ch, ui::Color::Hex(0x18181B), 11.5f, nullptr, 0.0f);
         chipX += cs2.x + 16.f;
     }
 }
@@ -459,10 +465,10 @@ void SceneText(ui::Context& ctx, aris_demo::DemoState&) {
         ts.fill = ui::Color::Hex(0xD9381E);   // Bauhaus Vermillion Red
         ctx.DrawRect(tag, ts);
         ctx.DrawText(ui::Vec2(tag.x + 10.f, tag.y + 5.f), "TYPE SPECIMEN // v2.0",
-                     ui::Color::White(), 11.f, nullptr, 0.45f);
+                     ui::Color::White(), 11.f, nullptr, 0.0f);
 
         ctx.DrawText(ui::Vec2(page.Max().x - 220.f, page.y + 19.f),
-                     "FREETYPE + MSDFGEN ENGINE", ui::Color::Hex(0x52525B), 11.f, nullptr, 0.3f);
+                     "FREETYPE + MSDFGEN ENGINE", ui::Color::Hex(0x52525B), 11.f, nullptr, 0.0f);
     }
 
     // Heavy black rule
@@ -473,10 +479,10 @@ void SceneText(ui::Context& ctx, aris_demo::DemoState&) {
 
     // Giant display specimen
     ctx.DrawText(ui::Vec2(page.x + 20.f, y), "Aa Bb Gg 78", ui::Color::Hex(0x09090B),
-                 38.f, nullptr, 0.5f);
+                 38.f, nullptr, 0.0f);
     const float gw = ctx.MeasureText("Aa Bb Gg 78", 38.f).x;
     ctx.DrawText(ui::Vec2(page.x + 36.f + gw, y + 8.f), "PRECISION VECTOR TYPE",
-                 ui::Color::Hex(0xD9381E), 16.f, nullptr, 0.5f);
+                 ui::Color::Hex(0xD9381E), 16.f, nullptr, 0.0f);
     y += 46.f;
 
     ctx.DrawText(ui::Vec2(page.x + 20.f, y),
@@ -490,18 +496,17 @@ void SceneText(ui::Context& ctx, aris_demo::DemoState&) {
     y += 14.f;
 
     // Typographic scale ladder with exact baseline alignment
-    auto drawLadderRow = [&](const char* sizeLabel, const char* sample, float pxSize, float weight) {
-        // Shared font baseline offset: (pxSize - 11.f) * ~0.8f
+    auto drawLadderRow = [&](const char* sizeLabel, const char* sample, float pxSize) {
         const float labelY = y + (pxSize - 11.f) * 0.78f;
-        ctx.DrawText(ui::Vec2(page.x + 20.f, labelY), sizeLabel, ui::Color::Hex(0xD9381E), 11.f, nullptr, 0.25f);
-        ctx.DrawText(ui::Vec2(page.x + 72.f, y), sample, ui::Color::Hex(0x18181B), pxSize, nullptr, weight);
+        ctx.DrawText(ui::Vec2(page.x + 20.f, labelY), sizeLabel, ui::Color::Hex(0xD9381E), 11.f, nullptr, 0.0f);
+        ctx.DrawText(ui::Vec2(page.x + 72.f, y), sample, ui::Color::Hex(0x18181B), pxSize, nullptr, 0.0f);
         y += pxSize + 10.f;
     };
 
-    drawLadderRow("22 px", "Subpixel antialiasing with infinite zoom fidelity", 22.f, 0.35f);
-    drawLadderRow("16 px", "Glyph metrics, baseline alignment & vector rendering", 16.f, 0.20f);
-    drawLadderRow("13 px", "The quick brown fox jumps over the lazy dog. 0123456789", 13.f, 0.10f);
-    drawLadderRow("11 px", "CHARSET: ASCII 32-126 + SYMBOLS // RUNTIME ATLAS 1024x1024", 11.f, 0.25f);
+    drawLadderRow("22 px", "Subpixel antialiasing with infinite zoom fidelity", 22.f);
+    drawLadderRow("16 px", "Glyph metrics, baseline alignment & vector rendering", 16.f);
+    drawLadderRow("13 px", "The quick brown fox jumps over the lazy dog. 0123456789", 13.f);
+    drawLadderRow("11 px", "CHARSET: ASCII 32-126 + SYMBOLS // RUNTIME ATLAS 1024x1024", 11.f);
 
     y += 10.f;
 
@@ -511,7 +516,7 @@ void SceneText(ui::Context& ctx, aris_demo::DemoState&) {
         Fill(ctx, metBox, ui::Color::Hex(0xF0EDE4), 0.f, ui::Color::Hex(0x18181B), 1.f);
         ctx.DrawText(ui::Vec2(metBox.x + 10.f, metBox.y + 4.5f),
                      "ASCENDER: +0.82 em  |  DESCENDER: -0.22 em  |  MSDF RANGE: 4.0 px  |  PASS: 1-DRAW CALL",
-                     ui::Color::Hex(0x52525B), 10.5f, nullptr, 0.3f);
+                     ui::Color::Hex(0x52525B), 10.5f, nullptr, 0.0f);
         y += 30.f;
     }
 
@@ -530,11 +535,11 @@ void SceneText(ui::Context& ctx, aris_demo::DemoState&) {
         ctx.DrawRect(ui::Rect(codeBox.x, codeBox.y, 5.f, codeBox.h), vTab);
 
         ctx.DrawText(ui::Vec2(codeBox.x + 16.f, codeBox.y + 14.f),
-                     "ctx.DrawText(pos, \"Crisp Vector Text\", Color::Black(), 16.f, nullptr, 0.35f);",
+                     "ctx.DrawText(pos, \"Crisp Vector Text\", Color::Black(), 16.f);",
                      ui::Color::Hex(0x18181B), 12.f);
 
         ctx.DrawText(ui::Vec2(codeBox.Max().x - 110.f, codeBox.y + 15.f),
-                     "[OPENGL 3.3+]", ui::Color::Hex(0x71717A), 10.5f, nullptr, 0.3f);
+                     "[OPENGL 3.3+]", ui::Color::Hex(0x71717A), 10.5f, nullptr, 0.0f);
     }
 }
 

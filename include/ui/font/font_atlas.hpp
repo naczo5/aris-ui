@@ -30,6 +30,15 @@ public:
 
     // pngPath: generated MSDF atlas image; jsonPath: generated metadata.
     bool Load(const std::string& pngPath, const std::string& jsonPath);
+
+    // Direct TrueType/OpenType font loading (.ttf, .otf, or Google Fonts).
+    // Automatically checks cache under cachePrefix (defaults to "atlas/<font-name>"),
+    // generates the MSDF atlas if missing or outdated, and loads it into OpenGL.
+    bool LoadTtf(const std::string& ttfPath,
+                 const std::string& cachePrefix = "",
+                 float fontSize = 48.f,
+                 float pxRange = 4.f);
+
     void Unload();
     bool Loaded() const { return texture_ != 0; }
 

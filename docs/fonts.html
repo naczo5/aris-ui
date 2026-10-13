@@ -16,13 +16,43 @@
   </nav>
 </header>
 <main class="site">
-<div class="toc">On this page — <a href="#generating-an-atlas">Generating an atlas</a> <a href="#runtime-loading">Runtime loading</a> <a href="#json-schema">JSON schema</a> <a href="#msdf-details-msdfgen-v1-12-semantics">MSDF details (msdfgen v1.12 semantics)</a> <a href="#text-layout">Text layout</a></div>
+<div class="toc">On this page — <a href="#loading-custom-fonts-ttf-otf-google-fonts">Loading Custom Fonts (.ttf / .otf / Google Fonts)</a> <a href="#generating-an-atlas-offline">Generating an atlas offline</a> <a href="#runtime-loading-zero-freetype-dependency">Runtime loading (Zero FreeType Dependency)</a> <a href="#json-schema">JSON schema</a> <a href="#msdf-details-msdfgen-v1-12-semantics">MSDF details (msdfgen v1.12 semantics)</a> <a href="#text-layout">Text layout</a></div>
 <h1>Fonts</h1>
-<p>Text is rendered from offline-generated MSDF atlases. At runtime you load a PNG + JSON pair — no font parsing, no FreeType dependency in the shipped app.</p>
-<h2 id="generating-an-atlas">Generating an atlas</h2>
+<p>Text is rendered using Multi-channel Signed Distance Field (MSDF) vector atlases. <code>aris-ui</code> supports two loading workflows:</p>
+<ol>
+<li>1. **Direct TTF / OTF loading with automatic caching (<code>FontAtlas::LoadTtf</code>)**: Drop in any TrueType/OpenType font (including Google Fonts like Inter, Roboto, or JetBrains Mono) with one function call.</li>
+<li>2. **Zero-dependency runtime loading (<code>FontAtlas::Load</code>)**: Load pre-baked PNG + JSON atlases with no FreeType dependency in shipped game injection overlays.</li>
+</ol>
+<h2 id="loading-custom-fonts-ttf-otf-google-fonts">Loading Custom Fonts (.ttf / .otf / Google Fonts)</h2>
+<p>You can load any TrueType or OpenType font directly. If the cached atlas files already exist and are up to date, <code>aris-ui</code> loads them instantly from disk; otherwise, it generates and caches the MSDF atlas automatically:</p>
+<pre><code>
+ui::FontAtlas font;
+
+// 1. One-line loading: automatically generates &amp; caches under atlas/Inter
+font.LoadTtf(&quot;assets/fonts/Inter.ttf&quot;);
+
+// 2. Specify a custom cache prefix or generation parameters:
+font.LoadTtf(&quot;fonts/Roboto-Bold.ttf&quot;, &quot;atlas/roboto_bold&quot;, /*fontSize=*/48.f, /*pxRange=*/4.f);
+
+ctx.SetFont(&amp;font);
+</code></pre>
+<h3>Fetching Google Fonts</h3>
+<p>A CLI helper script <code>./tools/fetch_font.sh</code> is included to download any Google Font directly into <code>assets/fonts/</code>:</p>
+<pre><code>
+# Download standard Google Fonts by name:
+./tools/fetch_font.sh Inter
+./tools/fetch_font.sh Roboto
+./tools/fetch_font.sh &quot;JetBrains Mono&quot;
+
+# Or download from any custom URL:
+./tools/fetch_font.sh https://example.com/MyFont.ttf
+</code></pre>
+<p><code>aris-ui</code> comes bundled out-of-the-box with clean static TrueType builds of <strong>Inter</strong> (<code>assets/fonts/Inter.ttf</code>, <code>Inter-Regular.ttf</code>, <code>Inter-Bold.ttf</code>).</p>
+<h2 id="generating-an-atlas-offline">Generating an atlas offline</h2>
+<p>For stripped-down game injection clients without FreeType:</p>
 <p>From the CLI (built as <code>build/atlasgen</code>):</p>
 <pre><code>
-./build/atlasgen /usr/share/fonts/TTF/DejaVuSans.ttf atlas/ui
+./build/atlasgen assets/fonts/Inter.ttf atlas/ui
 </code></pre>
 <p>Or from code:</p>
 <pre><code>
@@ -31,13 +61,13 @@ params.fontSize = 48.f;         // reference px size (em-normalization basis)
 params.pxRange  = 4.f;          // MSDF distance range in atlas pixels
 params.firstCodepoint = 32;     // default: printable ASCII
 params.lastCodepoint  = 126;
-params.extraChars = &quot;\xC3\x97\xE2\x80\x94&quot;;   // UTF-8 extras (×, —)
+params.extraChars = &quot;\xC3\x97\xE2\x80\x94\xE2\x9C\x93&quot;;   // UTF-8 extras (×, —, ✓)
 
 std::string err;
-ui_atlas::GenerateAndWrite(&quot;font.ttf&quot;, &quot;atlas/ui&quot;, params, err);
+ui_atlas::GenerateAndWrite(&quot;assets/fonts/Inter.ttf&quot;, &quot;atlas/ui&quot;, params, err);
 </code></pre>
 <p><code>GenerateAndWrite</code> caches: outputs are regenerated only when the PNG is older than the font file. Delete the pair after changing generator code.</p>
-<h2 id="runtime-loading">Runtime loading</h2>
+<h2 id="runtime-loading-zero-freetype-dependency">Runtime loading (Zero FreeType Dependency)</h2>
 <pre><code>
 ui::FontAtlas font;
 if (!font.Load(&quot;atlas/ui.png&quot;, &quot;atlas/ui.json&quot;)) { /* handle error */ }

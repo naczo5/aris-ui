@@ -16,6 +16,9 @@ namespace aris_demo {
 inline std::string FindSystemFont() {
     namespace fs = std::filesystem;
     const char* candidates[] = {
+        "assets/fonts/Inter.ttf",
+        "../assets/fonts/Inter.ttf",
+        "../../assets/fonts/Inter.ttf",
         "/usr/share/fonts/noto/NotoSans-Medium.ttf",
         "/usr/share/fonts/truetype/noto/NotoSans-Medium.ttf",
         "/usr/share/fonts/TTF/Inter-Medium.ttf",

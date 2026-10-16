@@ -104,6 +104,7 @@ public:
     DrawBackend* drawBackend() const { return backend_; }
     // Destroy the default OpenGL batcher, or ask the active backend to drop GPU objects.
     void ReleaseGraphics();
+    void DiscardFrame();                           // drop recorded commands without drawing
     void Render();                                 // layout + flush draw commands
 
     // --- containers ---

@@ -432,6 +432,12 @@ void Context::CollectContainerRects(Container& container, Vec2 basePos) {
     }
 }
 
+void Context::DiscardFrame() {
+    queue_.Reset();
+    clickedId_ = kInvalidId;
+    releasedId_ = kInvalidId;
+}
+
 void Context::ReleaseGraphics() {
     if (backend_) backend_->ReleaseDevice();
     if (batcher_) {

@@ -63,8 +63,20 @@ text clipping compose naturally.
 
 ## Notes for custom backends
 
-The command queue is pure data (see `include/ui/renderer/command_queue.hpp`)
-— replay it with anything. The GL batcher is a reference backend. The vertex
-format packs: rect (4f), radii (4f), color (4 x u8), border color (4 x u8),
-params (4f: border width, shadow spread, shadow blur, is-glyph), shadow
-(4f: offset xy, opacity, quad padding), uv (4f), position (2f).
+The command queue is pure data (see `include/ui/renderer/command_queue.hpp`).
+`Context::SetDrawBackend()` sends `Render()` at a `DrawBackend`. With no
+backend set, the OpenGL batcher runs inside `GlStateGuard`.
+
+`FontAtlas::Load` keeps the atlas on the CPU (`Pixels()`, `Revision()`).
+Each backend uploads. `TextureId()` is a stable batch key, not a GL name.
+
+`DrawCircle` is a rounded rect. `DrawTriangle` is its own command (filled,
+or stroked when `stroke` > 0). Lines and triangles share the quad SDF path
+(`params.w` 2 and 3).
+
+`VulkanRenderer` records into a command buffer the host already put inside
+its render pass. Call `Prepare(atlas)` before the pass so font uploads are
+not issued mid-pass. Backdrop blur is skipped on Vulkan.
+
+The shared vertex is `ui::UiVertex` (120 bytes). OpenGL tries `#version 330 core`,
+then `330`, then `150`, so a compatibility context can still compile the shader.

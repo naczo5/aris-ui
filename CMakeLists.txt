@@ -64,14 +64,20 @@ add_library(aris-ui STATIC
     src/core/context.cpp
     src/core/theme.cpp
     src/renderer/command_queue.cpp
+    src/renderer/emit_draw.cpp
     src/renderer/batcher.cpp
     src/renderer/gl_state_guard.cpp
+    src/renderer/vulkan_renderer.cpp
     src/font/font_atlas.cpp
     src/widgets/widgets.cpp
     src/widgets/icons.cpp
     src/widgets/kit.cpp
 )
-target_include_directories(aris-ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(aris-ui PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan/include
+)
+target_include_directories(aris-ui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer)
 target_link_libraries(aris-ui
     PUBLIC  yogacore
     PRIVATE glad stb nlohmann_json

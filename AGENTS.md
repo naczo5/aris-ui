@@ -13,6 +13,7 @@ include/ui/            public API (headers are the contract)
                        widget_state.hpp, context.hpp (the frame API)
   layout/              layout_node.hpp (RAII Yoga wrapper)
   renderer/            command_queue.hpp (POD draw commands), batcher.hpp,
+                       draw_backend.hpp, vulkan_renderer.hpp, ui_vertex.hpp,
                        gl_state_guard.hpp
   font/                font_atlas.hpp (runtime MSDF atlas)
   widgets/             widgets.hpp (Button/Toggle/Slider/Label)
@@ -70,8 +71,13 @@ Do not claim a rendering change works without having viewed a preview PNG.
   (em here): `Range(pxRange / fs)`. Don't "simplify" this back to pixels.
 - **Atlas cache:** `atlas/ui.png|json` regenerate only when older than the
   font. Delete them after changing `tools/atlas_generator/`.
-- **GL context lifetime:** `FontAtlas::Load/Unload` upload/delete GL textures.
-  Must happen with a live context; call `Unload()` before `glfwTerminate`.
+- **GL context lifetime:** `FontAtlas` stores CPU pixels. The GL batcher uploads
+  on draw and deletes that texture in `Shutdown()`. Call `Context::ReleaseGraphics()`
+  before the GL context dies. `Unload()` does not touch GL.
+- **Vulkan:** `VulkanRenderer::Prepare(atlas)` uploads fonts and must run outside
+  a render pass. `SetCommandBuffer()` then `Context::Render()` records inside the
+  host pass. Backdrop blur is skipped. Functions come from the host loader; the
+  library does not link `vulkan-1`.
 - **Scene previews:** each scene gets a fresh `ui::Context`; the harness
   clears the framebuffer every frame. Simulated input is injected *before*
   `BeginFrame` and eases over `--warmup` frames. Overlay scenes (hud,

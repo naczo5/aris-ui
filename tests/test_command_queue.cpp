@@ -65,6 +65,18 @@ TEST(push_glyph_records_uv_and_atlas) {
     CHECK_EQ(c.fontSize, 15.f);
 }
 
+TEST(push_triangle_records_points) {
+    CommandQueue q;
+    q.PushTriangle(Vec2(1.f, 2.f), Vec2(8.f, 2.f), Vec2(4.f, 9.f), Color::White(), 1.25f);
+    CHECK_EQ(q.Commands().size(), 1u);
+    const DrawCommand& c = q.Commands()[0];
+    CHECK(c.type == DrawCommand::Type::Triangle);
+    CHECK_EQ(c.pos, (Vec2(1.f, 2.f)));
+    CHECK_EQ(c.size, (Vec2(8.f, 2.f)));
+    CHECK_EQ(c.shadowOffset, (Vec2(4.f, 9.f)));
+    CHECK_EQ(c.borderWidth, 1.25f);
+}
+
 TEST(clip_push_pop_tracks_depth) {
     CommandQueue q;
     q.PushClip(Rect(0.f, 0.f, 50.f, 50.f));

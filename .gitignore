@@ -1,5 +1,7 @@
 # Build
 build/
+tools/glslang/
+src/renderer/shaders/*.spv
 build-*/
 cmake-build-*/
 out/

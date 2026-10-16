@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include "ui/core/math.hpp"
-#include "glad/gl.h"
 
 namespace ui {
 
@@ -29,20 +29,28 @@ public:
     FontAtlas& operator=(const FontAtlas&) = delete;
 
     // pngPath: generated MSDF atlas image; jsonPath: generated metadata.
+    // Pixels stay on the CPU. The active renderer uploads them.
     bool Load(const std::string& pngPath, const std::string& jsonPath);
 
     // Direct TrueType/OpenType font loading (.ttf, .otf, or Google Fonts).
     // Automatically checks cache under cachePrefix (defaults to "atlas/<font-name>"),
-    // generates the MSDF atlas if missing or outdated, and loads it into OpenGL.
+    // generates the MSDF atlas if missing or outdated, and keeps the pixels on the CPU.
     bool LoadTtf(const std::string& ttfPath,
                  const std::string& cachePrefix = "",
                  float fontSize = 48.f,
                  float pxRange = 4.f);
 
     void Unload();
-    bool Loaded() const { return texture_ != 0; }
+    bool Loaded() const { return !glyphs_.empty() && !pixels_.empty(); }
 
-    std::uint32_t TextureId() const { return texture_; }
+    // Stable non-zero id while loaded. Renderers bind their own GPU texture;
+    // this value only groups glyph draws in the command stream.
+    std::uint32_t TextureId() const { return Loaded() ? 1u : 0u; }
+    const std::uint8_t* Pixels() const { return pixels_.empty() ? nullptr : pixels_.data(); }
+    int Width() const { return width_; }
+    int Height() const { return height_; }
+    int Channels() const { return 3; }
+    std::uint64_t Revision() const { return revision_; }
     float PxRange() const { return pxRange_; }
     float GenerationFontSize() const { return fontSize_; }
     float LineHeight(float fontSize) const { return lineHeight_ * fontSize; }
@@ -52,7 +60,8 @@ public:
 
 private:
     std::unordered_map<std::uint32_t, GlyphInfo> glyphs_;
-    std::uint32_t texture_ = 0;
+    std::vector<std::uint8_t> pixels_;
+    std::uint64_t revision_ = 0;
     int width_ = 0, height_ = 0;
     float pxRange_ = 0.f;
     float fontSize_ = 0.f;

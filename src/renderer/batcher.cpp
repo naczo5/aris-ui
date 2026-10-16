@@ -1,4 +1,5 @@
 #include "ui/renderer/batcher.hpp"
+#include "emit_draw.hpp"
 #include "ui/font/font_atlas.hpp"
 #include "ui/renderer/gl_state_guard.hpp"
 #include "glad/gl.h"
@@ -103,6 +104,20 @@ float median3(vec3 v) {
     return max(min(v.x, v.y), min(max(v.x, v.y), v.z));
 }
 
+// Inigo Quilez signed distance. Negative inside.
+float sdTriangle(vec2 p, vec2 a, vec2 b, vec2 c) {
+    vec2 e0 = b - a, e1 = c - b, e2 = a - c;
+    vec2 v0 = p - a, v1 = p - b, v2 = p - c;
+    vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / max(dot(e0, e0), 1e-6), 0.0, 1.0);
+    vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / max(dot(e1, e1), 1e-6), 0.0, 1.0);
+    vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / max(dot(e2, e2), 1e-6), 0.0, 1.0);
+    float s = sign(e0.x * e2.y - e0.y * e2.x);
+    vec2 d = min(min(vec2(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),
+                     vec2(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),
+                     vec2(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));
+    return -sqrt(d.x) * sign(d.y);
+}
+
 // msdfgen standard: how many atlas pixels correspond to one screen pixel.
 float screenPxRange() {
     vec2 texSize = vec2(textureSize(uTex, 0));
@@ -127,6 +142,18 @@ void main() {
         float a = vColor.a * alpha;
         if (a < 0.004) discard;
         fragColor = vec4(vColor.rgb * a, a);   // premultiplied
+        return;
+    }
+
+    // --- triangle path (isGlyph == 3) ---
+    // radii.xy / radii.zw / extra.xy are the three points, local to the content rect.
+    if (vParams.w > 2.5) {
+        float sd = sdTriangle(vLocal, vRadii.xy, vRadii.zw, vExtra.xy);
+        float d = (vParams.x > 0.0) ? abs(sd) - vParams.x * 0.5 : sd;
+        float alpha = clamp(0.5 - d, 0.0, 1.0);
+        float ta = vColor.a * alpha;
+        if (ta < 0.004) discard;
+        fragColor = vec4(vColor.rgb * ta, ta);
         return;
     }
 
@@ -215,6 +242,14 @@ GLuint CompileShader(GLenum type, const char* src) {
     return shader;
 }
 
+std::string SwapShaderVersion(const char* src, const char* versionLine) {
+    const char* nl = std::strchr(src, '\n');
+    if (!nl) return src;
+    std::string out = versionLine;
+    out.append(nl);
+    return out;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -227,8 +262,21 @@ Batcher::~Batcher() {
 bool Batcher::Initialize() {
     if (initialized_) return true;
 
-    GLuint vs = CompileShader(GL_VERTEX_SHADER, shaders::kVertexSrc);
-    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, shaders::kFragmentSrc);
+    // 330 core is the primary path. Compatibility contexts (Minecraft 1.8.9)
+    // sometimes reject the "core" token or 330 entirely; 150 still has layout
+    // locations and textureSize().
+    const char* versions[] = {"#version 330 core", "#version 330", "#version 150"};
+    GLuint vs = 0, fs = 0;
+    for (const char* version : versions) {
+        const std::string vsrc = SwapShaderVersion(shaders::kVertexSrc, version);
+        const std::string fsrc = SwapShaderVersion(shaders::kFragmentSrc, version);
+        vs = CompileShader(GL_VERTEX_SHADER, vsrc.c_str());
+        fs = CompileShader(GL_FRAGMENT_SHADER, fsrc.c_str());
+        if (vs && fs) break;
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+        vs = fs = 0;
+    }
     if (!vs || !fs) return false;
 
     program_ = glCreateProgram();
@@ -305,8 +353,31 @@ void Batcher::Shutdown() {
     glDeleteVertexArrays(1, &vao_);
     glDeleteBuffers(1, &vbo_);
     glDeleteTextures(1, &whiteTexture_);
-    program_ = vao_ = vbo_ = whiteTexture_ = 0;
+    if (atlasTexture_) glDeleteTextures(1, &atlasTexture_);
+    program_ = vao_ = vbo_ = whiteTexture_ = atlasTexture_ = 0;
+    atlasPtr_ = nullptr;
+    atlasRevision_ = 0;
     initialized_ = false;
+}
+
+std::uint32_t Batcher::UploadAtlas(const FontAtlas* atlas) {
+    if (!atlas || !atlas->Loaded() || !atlas->Pixels()) return 0;
+    if (atlasTexture_ && atlasPtr_ == atlas && atlasRevision_ == atlas->Revision())
+        return atlasTexture_;
+    if (atlasTexture_) glDeleteTextures(1, &atlasTexture_);
+    glGenTextures(1, &atlasTexture_);
+    glBindTexture(GL_TEXTURE_2D, atlasTexture_);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, atlas->Width(), atlas->Height(), 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, atlas->Pixels());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    atlasPtr_ = atlas;
+    atlasRevision_ = atlas->Revision();
+    return atlasTexture_;
 }
 
 void Batcher::Draw(const CommandQueue& queue, const FontAtlas* atlas,
@@ -323,126 +394,42 @@ void Batcher::Draw(const CommandQueue& queue, const FontAtlas* atlas,
 
     const float atlasPxRange = (atlas && atlas->Loaded()) ? atlas->PxRange() : 0.f;
     const float atlasGenSize = (atlas && atlas->Loaded()) ? atlas->GenerationFontSize() : 1.f;
-    const std::uint32_t atlasTex = (atlas && atlas->Loaded()) ? atlas->TextureId() : 0;
+    const std::uint32_t atlasTex = UploadAtlas(atlas);
 
-    vertices_.clear();
-    pending_.clear();
-    currentAtlas_ = 0;
-    currentFontSize_ = -1.f;
-
-    Rect clipStack[32];
-    int clipDepth = 0;
-
-    for (const DrawCommand& cmd : queue.Commands()) {
-        switch (cmd.type) {
-        case DrawCommand::Type::ClipPush: {
-            Flush(currentAtlas_, currentFontSize_, atlasPxRange, atlasGenSize, atlasTex,
-                  framebufferHeight);
-            if (clipDepth < 32) clipStack[clipDepth++] = Rect(cmd.pos.x, cmd.pos.y, cmd.size.x, cmd.size.y);
-            ApplyScissor(clipStack, clipDepth, framebufferHeight);
-            break;
-        }
-        case DrawCommand::Type::ClipPop: {
-            Flush(currentAtlas_, currentFontSize_, atlasPxRange, atlasGenSize, atlasTex,
-                  framebufferHeight);
-            if (clipDepth > 0) --clipDepth;
-            ApplyScissor(clipStack, clipDepth, framebufferHeight);
-            break;
-        }
-        case DrawCommand::Type::Backdrop: {
-            Flush(currentAtlas_, currentFontSize_, atlasPxRange, atlasGenSize, atlasTex,
-                  framebufferHeight);
-            DrawBackdrop(cmd, clipStack, clipDepth, framebufferWidth, framebufferHeight);
-            break;
-        }
-        case DrawCommand::Type::RoundedRect: {
-            UiVertex proto{};
-            const float pad = (cmd.shadowOpacity > 0.f)
-                ? std::max(std::abs(cmd.shadowOffset.x), std::abs(cmd.shadowOffset.y)) +
-                  cmd.shadowSpread + cmd.shadowBlur + 2.f
-                : 0.f;
-            proto.rect[0] = cmd.pos.x; proto.rect[1] = cmd.pos.y;
-            proto.rect[2] = cmd.size.x; proto.rect[3] = cmd.size.y;
-            proto.radii[0] = cmd.radii.x; proto.radii[1] = cmd.radii.y;
-            proto.radii[2] = cmd.radii.z; proto.radii[3] = cmd.radii.w;
-            proto.color[0] = (std::uint8_t)(cmd.color.x * 255.f + 0.5f);
-            proto.color[1] = (std::uint8_t)(cmd.color.y * 255.f + 0.5f);
-            proto.color[2] = (std::uint8_t)(cmd.color.z * 255.f + 0.5f);
-            proto.color[3] = (std::uint8_t)(cmd.color.w * 255.f + 0.5f);
-            proto.borderColor[0] = (std::uint8_t)(cmd.borderColor.x * 255.f + 0.5f);
-            proto.borderColor[1] = (std::uint8_t)(cmd.borderColor.y * 255.f + 0.5f);
-            proto.borderColor[2] = (std::uint8_t)(cmd.borderColor.z * 255.f + 0.5f);
-            proto.borderColor[3] = (std::uint8_t)(cmd.borderColor.w * 255.f + 0.5f);
-            proto.params[0] = cmd.borderWidth;
-            proto.params[1] = cmd.shadowSpread;
-            proto.params[2] = cmd.shadowBlur;
-            proto.params[3] = 0.f;
-            proto.shadow[0] = cmd.shadowOffset.x;
-            proto.shadow[1] = cmd.shadowOffset.y;
-            proto.shadow[2] = cmd.shadowOpacity;
-            proto.shadow[3] = pad;
-            proto.color2[0] = (std::uint8_t)(cmd.colorEnd.x * 255.f + 0.5f);
-            proto.color2[1] = (std::uint8_t)(cmd.colorEnd.y * 255.f + 0.5f);
-            proto.color2[2] = (std::uint8_t)(cmd.colorEnd.z * 255.f + 0.5f);
-            proto.color2[3] = (std::uint8_t)(cmd.colorEnd.w * 255.f + 0.5f);
-            proto.shadowColor[0] = (std::uint8_t)(cmd.shadowColor.x * 255.f + 0.5f);
-            proto.shadowColor[1] = (std::uint8_t)(cmd.shadowColor.y * 255.f + 0.5f);
-            proto.shadowColor[2] = (std::uint8_t)(cmd.shadowColor.z * 255.f + 0.5f);
-            proto.shadowColor[3] = (std::uint8_t)(cmd.shadowColor.w * 255.f + 0.5f);
-            proto.extra[0] = cmd.gradientDir.x;
-            proto.extra[1] = cmd.gradientDir.y;
-            PushQuad(proto);
-            break;
-        }
-        case DrawCommand::Type::Line: {
-            UiVertex proto{};
-            const Vec2 a = cmd.pos, b = cmd.size;
-            const float th = std::max(cmd.borderWidth, 0.5f);
-            const float pad = th * 0.5f + 2.f;
-            const float bx = std::min(a.x, b.x), by = std::min(a.y, b.y);
-            proto.rect[0] = bx; proto.rect[1] = by;
-            proto.rect[2] = std::abs(a.x - b.x); proto.rect[3] = std::abs(a.y - b.y);
-            proto.radii[0] = a.x - bx; proto.radii[1] = a.y - by;   // endpoints, local
-            proto.radii[2] = b.x - bx; proto.radii[3] = b.y - by;
-            proto.color[0] = (std::uint8_t)(cmd.color.x * 255.f + 0.5f);
-            proto.color[1] = (std::uint8_t)(cmd.color.y * 255.f + 0.5f);
-            proto.color[2] = (std::uint8_t)(cmd.color.z * 255.f + 0.5f);
-            proto.color[3] = (std::uint8_t)(cmd.color.w * 255.f + 0.5f);
-            proto.params[0] = th;
-            proto.params[3] = 2.f;   // line
-            proto.shadow[3] = pad;
-            PushQuad(proto);
-            break;
-        }
-        case DrawCommand::Type::Glyph: {
-            // Glyphs batch per (atlas texture, font size) so the px-range
-            // uniform stays consistent across the batch.
-            if (currentAtlas_ != cmd.atlasId || currentFontSize_ != cmd.fontSize) {
-                Flush(currentAtlas_, currentFontSize_, atlasPxRange, atlasGenSize, atlasTex,
-                      framebufferHeight);
-                currentAtlas_ = cmd.atlasId;
-                currentFontSize_ = cmd.fontSize;
+    std::vector<UiSpan> spans;
+    BuildUiSpans(queue, spans);
+    bool scissorOn = false;
+    for (const UiSpan& span : spans) {
+        if (span.backdrop) {
+            Rect clipStack[1];
+            int depth = 0;
+            if (span.scissor && span.scissorW > 0.f && span.scissorH > 0.f) {
+                clipStack[0] = Rect(span.scissorX, span.scissorY, span.scissorW, span.scissorH);
+                depth = 1;
             }
-            UiVertex proto{};
-            proto.rect[0] = cmd.pos.x; proto.rect[1] = cmd.pos.y;
-            proto.rect[2] = cmd.size.x; proto.rect[3] = cmd.size.y;
-            proto.color[0] = (std::uint8_t)(cmd.color.x * 255.f + 0.5f);
-            proto.color[1] = (std::uint8_t)(cmd.color.y * 255.f + 0.5f);
-            proto.color[2] = (std::uint8_t)(cmd.color.z * 255.f + 0.5f);
-            proto.color[3] = (std::uint8_t)(cmd.color.w * 255.f + 0.5f);
-            proto.params[0] = cmd.borderWidth;   // embolden weight
-            proto.params[3] = 1.f;   // isGlyph
-            proto.uv[0] = cmd.u0; proto.uv[1] = cmd.v0;
-            proto.uv[2] = cmd.u1; proto.uv[3] = cmd.v1;
-            proto.shadow[3] = 0.f;
-            PushQuad(proto);
-            break;
+            DrawBackdrop(span.backdropCmd, clipStack, depth, framebufferWidth, framebufferHeight);
+            scissorOn = depth > 0;
+            continue;
         }
+        if (span.scissor) {
+            if (span.scissorW <= 0.f || span.scissorH <= 0.f) {
+                glEnable(GL_SCISSOR_TEST);
+                glScissor(0, 0, 0, 0);
+            } else {
+                glEnable(GL_SCISSOR_TEST);
+                glScissor((GLint)span.scissorX,
+                          (GLint)(framebufferHeight - (span.scissorY + span.scissorH)),
+                          (GLsizei)span.scissorW, (GLsizei)span.scissorH);
+            }
+            scissorOn = true;
+        } else if (scissorOn) {
+            glDisable(GL_SCISSOR_TEST);
+            scissorOn = false;
         }
+        pending_ = span.verts;
+        Flush(span.atlasId, span.fontSize, atlasPxRange, atlasGenSize, atlasTex, framebufferHeight);
     }
-    Flush(currentAtlas_, currentFontSize_, atlasPxRange, atlasGenSize, atlasTex,
-          framebufferHeight);
-    if (clipDepth > 0) glDisable(GL_SCISSOR_TEST);
+    if (scissorOn) glDisable(GL_SCISSOR_TEST);
 }
 
 void Batcher::ApplyScissor(const Rect* clipStack, int depth, float framebufferHeight) {

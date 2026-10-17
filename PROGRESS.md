@@ -88,7 +88,7 @@ criteria; statuses are updated as work completes.
 - [x] Tinted drop shadows and glow effects (`shadowColor`) with proper premultiplied alpha
 - [x] True frosted-glass backdrop blur (`DrawBackdropBlur`, dual separable Gaussian downsample/upsample passes via FBOs, rounded-rect alpha composite)
 - [x] Anti-aliased round-capped line segment primitive (`DrawCommand::Type::Line`, `Context::DrawLine`)
-- [x] Anti-aliased circle primitive (`DrawCommand::Type::Circle`, `Context::DrawCircle`)
+- [x] Anti-aliased circle helper (`Context::DrawCircle` emits a rounded rect whose radii equal the radius)
 - [x] Faux-weight MSDF text emboldening (`weight` parameter on `Context::DrawText`)
 - [x] Resolution-independent vector icons (`ui::Icon`, `ui::DrawIcon`: Combat, Movement, Player, Visuals, Client, Friends, Configs, Hud, Search, GrimCrest, Cursor, etc.)
 - [x] High-level ClickGUI kit components (`ui::kit`: `GlassPanel`, `NavItem`, `ModuleRow`, `IconButton`, `SectionTitle`, `Avatar`)
@@ -96,6 +96,16 @@ criteria; statuses are updated as work completes.
 - **Acceptance:** `make verify` produces pixel-perfect Grim Client-quality glass ClickGUI preview and upgraded component scenes.
 
 ---
+
+## Stage 17 — Host backends — `DONE`
+- [x] `FontAtlas` keeps MSDF pixels on the CPU; renderers upload
+- [x] `DrawBackend` so `Context::Render()` can target something other than the built-in GL batcher
+- [x] `VulkanRenderer` records into a host render pass (no swapchain). Rects, glyphs, lines, circles, triangles, clips. Backdrop blur stays OpenGL-only
+- [x] `VulkanRenderer` rotates `framesInFlight` vertex/descriptor slots, honours `subpass`/`sampleCount`, and clamps scissor rects to the render area
+- [x] `DrawTriangle` / `DrawCommand::Type::Triangle`
+- [x] OpenGL shader falls back from `#version 330 core` to `330` then `150` when a compatibility context rejects the primary version
+- [x] `BuildUiSpans` (the shared command→vertex span pass) covered by unit tests; `make spv` regenerates the checked-in Vulkan SPIR-V
+- **Acceptance:** `aris_tests` passes. Vulkan path compiles against vendored headers and loads functions through a host callback. Not yet exercised against a real swapchain pass.
 
 ## Stage 10+ — Roadmap (pending)
 - [ ] **Stage 11 — Input backends:** Win32 `WndProc` adapter, standalone GLFW adapter module; cursor grab/ungrab controller (LWJGL2 + GLFW modes)

@@ -24,6 +24,7 @@
 #include "ui/core/widget_state.hpp"
 #include "ui/layout/layout_node.hpp"
 #include "ui/renderer/command_queue.hpp"
+#include "ui/renderer/draw_backend.hpp"
 
 namespace ui {
 
@@ -99,7 +100,12 @@ public:
     // --- frame lifecycle (caller-driven) ---
     void BeginFrame(float dt, float width, float height, float scale = 1.f);
     bool ProcessInput(const InputEvent& event);   // returns true if the UI consumed it
-    void Render();                                 // layout + flush draw commands (GL)
+    void SetDrawBackend(DrawBackend* backend) { backend_ = backend; }
+    DrawBackend* drawBackend() const { return backend_; }
+    // Destroy the default OpenGL batcher, or ask the active backend to drop GPU objects.
+    void ReleaseGraphics();
+    void DiscardFrame();                           // drop recorded commands without drawing
+    void Render();                                 // layout + flush draw commands
 
     // --- containers ---
     void BeginPanel(const char* id, const Rect& rect, const PanelStyle& style = {});
@@ -128,8 +134,11 @@ public:
     Vec2 MeasureText(std::string_view text, float fontSize) const;
     // Anti-aliased line with round caps (the primitive vector icons are built from).
     void DrawLine(Vec2 a, Vec2 b, float thickness, const Color& color);
-    // Filled / outlined circle helpers (outline when `stroke` > 0).
+    // Filled / outlined circle. Emitted as a rounded rect whose radii equal `radius`
+    // (the SDF of that box is a disk). `stroke` > 0 draws an outline.
     void DrawCircle(Vec2 center, float radius, const Color& color, float stroke = 0.f);
+    // Filled triangle, or a stroked outline when `stroke` > 0.
+    void DrawTriangle(Vec2 a, Vec2 b, Vec2 c, const Color& color, float stroke = 0.f);
     // Frosted glass: gaussian-blurs everything already drawn beneath `rect`
     // (rounded by `radii`) and mixes `tint` (its alpha = mix amount) over it.
     // Draw the translucent surface *after* this call. `blurRadius` in px.
@@ -206,6 +215,7 @@ private:
     // command output
     CommandQueue queue_;
     std::unique_ptr<Batcher> batcher_;
+    DrawBackend* backend_ = nullptr;
 };
 
 } // namespace ui

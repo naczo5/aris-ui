@@ -7,6 +7,7 @@
 | glad | glad2, generated GL core 3.3 | github.com/Dav1dde/glad | OpenGL loader |
 | stb | master snapshot 2026-10 | github.com/nothings/stb | stb_image (atlas loading), stb_image_write (atlas output) |
 | nlohmann/json | v3.11.3 single header | github.com/nlohmann/json | atlas metadata parsing |
+| Vulkan-Headers | 1.4.356 | github.com/KhronosGroup/Vulkan-Headers | host-owned Vulkan renderer (headers only, no loader lib) |
 
 Notes:
 - Vendored repos were trimmed of language bindings/tests/fuzz assets; `.git` folders removed.

@@ -49,7 +49,7 @@ if (ARIS_UI_BUILD_TOOLS)
     target_include_directories(aris-atlasgen PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/tools)
     target_link_libraries(aris-atlasgen
         PUBLIC  msdfgen::msdfgen-core msdfgen::msdfgen-ext
-        PRIVATE stb
+        PRIVATE stb nlohmann_json
     )
     target_compile_definitions(aris-atlasgen PRIVATE STB_IMAGE_WRITE_IMPLEMENTATION)
 
@@ -64,14 +64,20 @@ add_library(aris-ui STATIC
     src/core/context.cpp
     src/core/theme.cpp
     src/renderer/command_queue.cpp
+    src/renderer/emit_draw.cpp
     src/renderer/batcher.cpp
     src/renderer/gl_state_guard.cpp
+    src/renderer/vulkan_renderer.cpp
     src/font/font_atlas.cpp
     src/widgets/widgets.cpp
     src/widgets/icons.cpp
     src/widgets/kit.cpp
 )
-target_include_directories(aris-ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(aris-ui PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan/include
+)
+target_include_directories(aris-ui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer)
 target_link_libraries(aris-ui
     PUBLIC  yogacore
     PRIVATE glad stb nlohmann_json
@@ -127,8 +133,13 @@ if (ARIS_UI_BUILD_TESTS)
         tests/test_command_queue.cpp
         tests/test_widget_state.cpp
         tests/test_layout.cpp
+        tests/test_shader_source.cpp
+        tests/test_emit_draw.cpp
     )
-    target_include_directories(aris_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    target_include_directories(aris_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer
+    )
     target_link_libraries(aris_tests PRIVATE aris-ui)
     add_test(NAME aris_tests COMMAND aris_tests)
 endif()

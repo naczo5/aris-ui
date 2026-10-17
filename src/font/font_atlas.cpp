@@ -38,6 +38,7 @@ bool FontAtlas::Load(const std::string& pngPath, const std::string& jsonPath) {
         return false;
     }
 
+    try {
     width_ = meta.at("atlas").at("width").get<int>();
     height_ = meta.at("atlas").at("height").get<int>();
     pxRange_ = meta.at("pxRange").get<float>();
@@ -60,15 +61,7 @@ bool FontAtlas::Load(const std::string& pngPath, const std::string& jsonPath) {
         return false;
     }
 
-    glGenTextures(1, &texture_);
-    glBindTexture(GL_TEXTURE_2D, texture_);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    pixels_.assign(pixels, pixels + static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 3);
     stbi_image_free(pixels);
 
     // --- glyphs (em-normalized plane metrics, pixel atlas bounds) ---
@@ -93,7 +86,13 @@ bool FontAtlas::Load(const std::string& pngPath, const std::string& jsonPath) {
         info.v1 = (ay + ah) / atlasH;
         glyphs_[g.at("codepoint").get<std::uint32_t>()] = info;
     }
+    ++revision_;
     return true;
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "[aris-ui] FontAtlas: %s\n", e.what());
+        Unload();
+        return false;
+    }
 }
 
 bool FontAtlas::LoadTtf(const std::string& ttfPath, const std::string& cachePrefix,
@@ -126,11 +125,10 @@ bool FontAtlas::LoadTtf(const std::string& ttfPath, const std::string& cachePref
 }
 
 void FontAtlas::Unload() {
-    if (texture_) {
-        glDeleteTextures(1, &texture_);
-        texture_ = 0;
-    }
+    pixels_.clear();
     glyphs_.clear();
+    width_ = height_ = 0;
+    ++revision_;
 }
 
 const GlyphInfo* FontAtlas::GetGlyph(std::uint32_t codepoint) const {

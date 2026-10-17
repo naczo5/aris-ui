@@ -294,6 +294,10 @@ void Context::DrawLine(Vec2 a, Vec2 b, float thickness, const Color& color) {
     queue_.PushLine(a, b, thickness, color);
 }
 
+void Context::DrawTriangle(Vec2 a, Vec2 b, Vec2 c, const Color& color, float stroke) {
+    queue_.PushTriangle(a, b, c, color, stroke);
+}
+
 void Context::DrawCircle(Vec2 c, float radius, const Color& color, float stroke) {
     RectStyle st;
     st.cornerRadii = Vec4(radius);
@@ -428,6 +432,20 @@ void Context::CollectContainerRects(Container& container, Vec2 basePos) {
     }
 }
 
+void Context::DiscardFrame() {
+    queue_.Reset();
+    clickedId_ = kInvalidId;
+    releasedId_ = kInvalidId;
+}
+
+void Context::ReleaseGraphics() {
+    if (backend_) backend_->ReleaseDevice();
+    if (batcher_) {
+        batcher_->Shutdown();
+        batcher_.reset();
+    }
+}
+
 void Context::Render() {
     RunLayoutAndCollectRects();
 
@@ -449,10 +467,16 @@ void Context::Render() {
         }
     }
 
-    if (!batcher_) batcher_ = std::make_unique<Batcher>();
-    if (!batcher_->Initialized()) batcher_->Initialize();
-
-    {
+    if (backend_) {
+        backend_->Draw(queue_, font_, width_, height_);
+    } else {
+        if (!batcher_) batcher_ = std::make_unique<Batcher>();
+        if (!batcher_->Initialized() && !batcher_->Initialize()) {
+            queue_.Reset();
+            clickedId_ = kInvalidId;
+            releasedId_ = kInvalidId;
+            return;
+        }
         // Defensive state guard: the host pipeline is untouched by our draw.
         GlStateGuard guard;
         batcher_->Draw(queue_, font_, width_, height_);

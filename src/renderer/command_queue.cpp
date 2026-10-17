@@ -25,6 +25,16 @@ void CommandQueue::PushRect(const Rect& rect, const RectStyle& style) {
     c.gradientDir = style.gradientDir;
 }
 
+void CommandQueue::PushTriangle(Vec2 a, Vec2 b, Vec2 c, const Color& color, float stroke) {
+    DrawCommand& cmd = commands_.emplace_back();
+    cmd.type = DrawCommand::Type::Triangle;
+    cmd.pos = a;
+    cmd.size = b;
+    cmd.shadowOffset = c;
+    cmd.color = color.ToVec4();
+    cmd.borderWidth = stroke;
+}
+
 void CommandQueue::PushLine(Vec2 a, Vec2 b, float thickness, const Color& color) {
     DrawCommand& c = commands_.emplace_back();
     c.type = DrawCommand::Type::Line;

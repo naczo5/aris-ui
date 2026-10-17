@@ -32,6 +32,7 @@ struct DrawCommand {
         RoundedRect,
         Glyph,
         Line,       // round-capped AA segment: pos -> size (end point); borderWidth = thickness
+        Triangle,   // pos, size, shadowOffset are the three points; borderWidth = stroke (0 = filled)
         Backdrop,   // blurs what is already drawn beneath rect (frosted glass); borderWidth = blur radius px, color = tint
         ClipPush,
         ClipPop,
@@ -69,6 +70,7 @@ public:
     void PushGlyph(const Rect& quad, const float uv[4], const Color& color,
                    std::uint32_t atlasId, float fontSize, float weight = 0.f);
     void PushLine(Vec2 a, Vec2 b, float thickness, const Color& color);
+    void PushTriangle(Vec2 a, Vec2 b, Vec2 c, const Color& color, float stroke = 0.f);
     void PushBackdrop(const Rect& rect, const Vec4& radii, float blurRadius, const Color& tint);
     void PushClip(const Rect& rect);
     void PopClip();

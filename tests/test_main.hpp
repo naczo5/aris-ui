@@ -38,6 +38,7 @@ inline void Report(const char* file, int line, const std::string& msg) {
 
 template <typename T>
 inline std::string ToStr(const T& v) { return std::to_string(v); }
+inline std::string ToStr(const std::string& v) { return v; }
 inline std::string ToStr(const ui::Vec2& v) {
     return "(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ")";
 }

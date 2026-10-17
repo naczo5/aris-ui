@@ -4,16 +4,19 @@
 // interleaved vertex buffer and an SDF shader pipeline. No GL types leak
 // into this header (GL context must be current when Draw is called).
 #include <cstdint>
+#include <memory>
 #include <vector>
 #include "ui/renderer/command_queue.hpp"
+#include "ui/renderer/ui_vertex.hpp"
 
 namespace ui {
 
 class FontAtlas;
+struct SpanScratch;
 
 class Batcher {
 public:
-    Batcher() = default;
+    Batcher();
     ~Batcher();
     Batcher(const Batcher&) = delete;
     Batcher& operator=(const Batcher&) = delete;
@@ -29,24 +32,10 @@ public:
               float framebufferWidth, float framebufferHeight);
 
 private:
-    struct UiVertex {
-        float pos[2];          // unit quad corner (0..1)
-        float rect[4];         // content rect (screen px): x, y, w, h
-        float radii[4];        // per-corner radii
-        std::uint8_t color[4];
-        std::uint8_t borderColor[4];
-        float params[4];       // borderWidth, shadowSpread, shadowBlur, isGlyph
-        float shadow[4];       // offsetX, offsetY, shadowOpacity, pad
-        float uv[4];           // glyph uv rect (0 when unused)
-        std::uint8_t color2[4];       // gradient end color
-        std::uint8_t shadowColor[4];
-        float extra[4];        // gradientDir.xy, unused
-    };
-
-    void Flush(std::uint32_t atlasId, float fontSize, float atlasPxRange,
-               float atlasGenSize, std::uint32_t atlasTex, float framebufferHeight);
+    void Flush(const std::vector<UiVertex>& verts, std::uint32_t atlasId, float fontSize,
+               float atlasPxRange, float atlasGenSize, std::uint32_t atlasTex);
     void ApplyScissor(const Rect* clipStack, int depth, float framebufferHeight);
-    void PushQuad(const UiVertex& proto);
+    std::uint32_t UploadAtlas(const FontAtlas* atlas);
 
     // --- backdrop blur (frosted glass) ---
     bool EnsureBackdropPipeline();
@@ -72,11 +61,13 @@ private:
     int uTex_ = -1;
 
     bool initialized_ = false;
-    std::vector<UiVertex> vertices_;
-    std::vector<UiVertex> pending_;
+    bool initFailed_ = false;
+    // Persistent span buffers (no per-frame allocation churn).
+    std::unique_ptr<SpanScratch> scratch_;
 
-    std::uint32_t currentAtlas_ = 0;
-    float currentFontSize_ = -1.f;
+    unsigned int atlasTexture_ = 0;
+    const FontAtlas* atlasPtr_ = nullptr;
+    std::uint64_t atlasRevision_ = 0;
 };
 
 } // namespace ui

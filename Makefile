@@ -6,19 +6,22 @@
 #   make test       — build + run the unit test suite (ctest)
 #   make preview    — render all UI scenes to previews/*.png (headless)
 #   make demo       — build + run the interactive desktop runner
-#   make docs       — regenerate docs/*.html from docs-src/*.md
-#   make verify     — build + test + preview (the full agent verification loop)
-#   make clean      — remove build artifacts (previews/atlas are kept)
+#   make docs       - regenerate docs/*.html from docs-src/*.md
+#   make spv        - regenerate src/renderer/vk_spv.inc from the Vulkan GLSL
+#   make verify     - build + test + preview (the full agent verification loop)
+#   make clean      - remove build artifacts (previews/atlas are kept)
 
 BUILD ?= build
 JOBS  ?= $(shell nproc 2>/dev/null || echo 4)
+# Override on systems where the interpreter is `python` (e.g. Windows).
+PYTHON ?= python3
 
-.PHONY: all configure build test preview demo docs verify clean help
+.PHONY: all configure build test preview demo docs spv verify clean help
 
 all: build
 
 help:
-	@echo "targets: configure build test preview demo docs verify clean"
+	@echo "targets: configure build test preview demo docs spv verify clean"
 
 configure:
 	cmake -S . -B $(BUILD) -DARIS_UI_BUILD_TESTS=ON
@@ -41,7 +44,14 @@ demo: build
 	./$(BUILD)/aris_runner
 
 docs:
-	python3 tools/gen_docs.py
+	$(PYTHON) tools/gen_docs.py
+
+# The Vulkan backend links against checked-in SPIR-V (src/renderer/vk_spv.inc).
+# Regenerate it after editing src/renderer/shaders/ui.vert|ui.frag — or the GLSL
+# copy in src/renderer/batcher.cpp. Needs glslang (tools/glslang/bin) + Python.
+# `make spv CHECK=1` verifies the checked-in file without writing it.
+spv:
+	$(PYTHON) tools/gen_spv.py $(if $(CHECK),--check,)
 
 # One-shot verification loop for agents: compile, test, and produce visual
 # previews. Run this after any change; diff previews/*.png to confirm.

@@ -134,6 +134,7 @@ if (ARIS_UI_BUILD_TESTS)
         tests/test_widget_state.cpp
         tests/test_layout.cpp
         tests/test_shader_source.cpp
+        tests/test_emit_draw.cpp
     )
     target_include_directories(aris_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/tests

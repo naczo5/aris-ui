@@ -2,6 +2,20 @@
 // Vulkan rasterizer that records into a host render pass. It does not own a
 // swapchain. Call Prepare() outside the pass (font uploads), then set the
 // command buffer and Context::Render() inside the pass.
+//
+// Note: this header defines VK_NO_PROTOTYPES for the vulkan headers it
+// includes, and aris-ui ships its own Vulkan-Headers on the public include
+// path (see third_party/VERSIONS.md).
+//
+// Contract with the host:
+//   - renderPass/subpass/sampleCount describe the pass the UI records into.
+//     The pipeline is built for them once: call Init() again after recreating
+//     the render pass (swapchain resize) or the UI will stop drawing.
+//   - Draw() rotates `framesInFlight` vertex/descriptor slots, so keep at most
+//     that many frames in flight; match it to the host's own constant.
+//   - Prepare() and ReleaseDevice() wait for the device (they replace images).
+//     Do not call them with frames in flight if you can avoid the stall.
+//   - Not thread safe; record from one thread.
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -21,13 +35,16 @@ struct VulkanLoader {
 };
 
 struct VulkanCreateInfo {
-    uint32_t apiVersion = VK_API_VERSION_1_0;
+    uint32_t apiVersion = VK_API_VERSION_1_0;   // informational; the renderer targets Vulkan 1.0
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
     uint32_t queueFamily = 0;
     VkQueue queue = VK_NULL_HANDLE;
     VkRenderPass renderPass = VK_NULL_HANDLE;
+    uint32_t subpass = 0;                       // subpass the UI draws in
+    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;   // must match the pass attachments
+    uint32_t framesInFlight = 2;                // vertex/descriptor slots rotated by Draw()
     VulkanLoader loader;
 };
 
@@ -47,6 +64,10 @@ public:
     void Prepare(const FontAtlas* atlas);
     void SetCommandBuffer(VkCommandBuffer cmd) { commandBuffer_ = cmd; }
 
+    // Blocks until the device is idle. Call before the host recreates or
+    // destroys anything this renderer's recorded frames reference.
+    void WaitIdle();
+
     void Draw(const CommandQueue& queue, const FontAtlas* atlas,
               float width, float height) override;
 
@@ -55,6 +76,15 @@ private:
     void DestroyGpu();
     bool UploadImage(const std::uint8_t* pixels, int width, int height, int channels,
                      VkImage& image, VkDeviceMemory& memory, VkImageView& view);
+
+    // Per-frame resources. Draw() rotates through these so the frame recorded on
+    // one slot can still be in flight while the next one is written.
+    struct FrameSlot {
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        VkDeviceSize capacity = 0;
+        VkDescriptorSet set = VK_NULL_HANDLE;
+    };
 
     VulkanCreateInfo info_{};
     bool haveInfo_ = false;
@@ -69,13 +99,10 @@ private:
     VkPipeline pipeline_ = VK_NULL_HANDLE;
     VkRenderPass pipelinePass_ = VK_NULL_HANDLE;
     VkDescriptorPool descPool_ = VK_NULL_HANDLE;
-    VkDescriptorSet descSet_ = VK_NULL_HANDLE;
     VkSampler sampler_ = VK_NULL_HANDLE;
     VkCommandPool cmdPool_ = VK_NULL_HANDLE;
-
-    VkBuffer vertexBuffer_ = VK_NULL_HANDLE;
-    VkDeviceMemory vertexMemory_ = VK_NULL_HANDLE;
-    VkDeviceSize vertexCapacity_ = 0;
+    std::vector<FrameSlot> slots_;
+    uint32_t frameCounter_ = 0;
 
     VkImage whiteImage_ = VK_NULL_HANDLE;
     VkDeviceMemory whiteMemory_ = VK_NULL_HANDLE;
@@ -86,6 +113,7 @@ private:
     const FontAtlas* fontPtr_ = nullptr;
     std::uint64_t fontRevision_ = 0;
     bool blurWarned_ = false;
+    bool passWarned_ = false;
 
     // Persistent per-frame scratch (spans + staging vertices).
     std::unique_ptr<SpanScratch> scratch_;
@@ -139,7 +167,6 @@ private:
     PFN_vkDestroyFence destroyFence_ = nullptr;
     PFN_vkWaitForFences waitFences_ = nullptr;
     PFN_vkQueueSubmit queueSubmit_ = nullptr;
-    PFN_vkQueueWaitIdle queueWait_ = nullptr;
     PFN_vkDeviceWaitIdle deviceWait_ = nullptr;
 };
 

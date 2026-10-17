@@ -3,6 +3,7 @@
 #include "emit_draw.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -32,7 +33,11 @@ bool VulkanRenderer::Init(const VulkanCreateInfo& info) {
     Shutdown();
     info_ = info;
     haveInfo_ = info.device && info.physicalDevice && info.renderPass && info.loader.resolve;
-    if (!haveInfo_) return false;
+    if (!haveInfo_) {
+        std::fprintf(stderr, "[aris-ui] vulkan: VulkanCreateInfo needs device, physicalDevice, "
+                             "renderPass and loader.resolve\n");
+        return false;
+    }
     return EnsureDevice();
 }
 
@@ -42,6 +47,7 @@ void VulkanRenderer::Shutdown() {
     commandBuffer_ = VK_NULL_HANDLE;
     fontPtr_ = nullptr;
     fontRevision_ = 0;
+    passWarned_ = false;
 }
 
 void VulkanRenderer::ReleaseDevice() {
@@ -103,11 +109,16 @@ bool VulkanRenderer::EnsureDevice() {
     LOAD(destroyFence_, "vkDestroyFence");
     LOAD(waitFences_, "vkWaitForFences");
     LOAD(queueSubmit_, "vkQueueSubmit");
-    LOAD(queueWait_, "vkQueueWaitIdle");
     LOAD(deviceWait_, "vkDeviceWaitIdle");
 #undef LOAD
 
     getMemProps_(info_.physicalDevice, &mem_);
+
+    // From here on every failure must drop what was created; retrying later
+    // (or Shutdown) picks up the pieces.
+    slots_.clear();
+    slots_.assign(std::min(std::max(info_.framesInFlight, 1u), 8u), FrameSlot{});
+    frameCounter_ = 0;
 
     auto module = [&](const uint32_t* code, uint32_t count) {
         VkShaderModuleCreateInfo ci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
@@ -119,7 +130,7 @@ bool VulkanRenderer::EnsureDevice() {
     };
     vert_ = module(kUiVertSpv, kUiVertSpv_count);
     frag_ = module(kUiFragSpv, kUiFragSpv_count);
-    if (!vert_ || !frag_) return false;
+    if (!vert_ || !frag_) { DestroyGpu(); return false; }
 
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = 0;
@@ -129,7 +140,10 @@ bool VulkanRenderer::EnsureDevice() {
     VkDescriptorSetLayoutCreateInfo sl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     sl.bindingCount = 1;
     sl.pBindings = &binding;
-    if (createSetLayout_(info_.device, &sl, nullptr, &setLayout_) != VK_SUCCESS) return false;
+    if (createSetLayout_(info_.device, &sl, nullptr, &setLayout_) != VK_SUCCESS) {
+        DestroyGpu();
+        return false;
+    }
 
     VkPushConstantRange push{};
     push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -140,7 +154,10 @@ bool VulkanRenderer::EnsureDevice() {
     pl.pSetLayouts = &setLayout_;
     pl.pushConstantRangeCount = 1;
     pl.pPushConstantRanges = &push;
-    if (createPipeLayout_(info_.device, &pl, nullptr, &pipelineLayout_) != VK_SUCCESS) return false;
+    if (createPipeLayout_(info_.device, &pl, nullptr, &pipelineLayout_) != VK_SUCCESS) {
+        DestroyGpu();
+        return false;
+    }
 
     VkVertexInputBindingDescription bind{0, sizeof(UiVertex), VK_VERTEX_INPUT_RATE_VERTEX};
     VkVertexInputAttributeDescription attrs[11] = {
@@ -173,7 +190,7 @@ bool VulkanRenderer::EnsureDevice() {
     rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rs.lineWidth = 1.f;
     VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    ms.rasterizationSamples = info_.sampleCount;
     VkPipelineColorBlendAttachmentState att{};
     att.blendEnable = VK_TRUE;
     att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -213,63 +230,94 @@ bool VulkanRenderer::EnsureDevice() {
     gp.pDynamicState = &dyn;
     gp.layout = pipelineLayout_;
     gp.renderPass = info_.renderPass;
-    gp.subpass = 0;
-    if (createPipes_(info_.device, VK_NULL_HANDLE, 1, &gp, nullptr, &pipeline_) != VK_SUCCESS) return false;
+    gp.subpass = info_.subpass;
+    if (createPipes_(info_.device, VK_NULL_HANDLE, 1, &gp, nullptr, &pipeline_) != VK_SUCCESS) {
+        std::fprintf(stderr, "[aris-ui] vulkan: pipeline creation failed (subpass %u, %u samples?)\n",
+                     info_.subpass, (unsigned)info_.sampleCount);
+        DestroyGpu();
+        return false;
+    }
     pipelinePass_ = info_.renderPass;
 
-    VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1};
+    VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                  (uint32_t)slots_.size()};
     VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-    dp.maxSets = 1;
+    dp.maxSets = (uint32_t)slots_.size();
     dp.poolSizeCount = 1;
     dp.pPoolSizes = &poolSize;
-    if (createDescPool_(info_.device, &dp, nullptr, &descPool_) != VK_SUCCESS) return false;
-    VkDescriptorSetAllocateInfo ds{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-    ds.descriptorPool = descPool_;
-    ds.descriptorSetCount = 1;
-    ds.pSetLayouts = &setLayout_;
-    if (allocSets_(info_.device, &ds, &descSet_) != VK_SUCCESS) return false;
+    if (createDescPool_(info_.device, &dp, nullptr, &descPool_) != VK_SUCCESS) {
+        DestroyGpu();
+        return false;
+    }
+    for (FrameSlot& slot : slots_) {
+        VkDescriptorSetAllocateInfo ds{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        ds.descriptorPool = descPool_;
+        ds.descriptorSetCount = 1;
+        ds.pSetLayouts = &setLayout_;
+        if (allocSets_(info_.device, &ds, &slot.set) != VK_SUCCESS) {
+            DestroyGpu();
+            return false;
+        }
+    }
 
     VkSamplerCreateInfo sci{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     sci.magFilter = sci.minFilter = VK_FILTER_LINEAR;
     sci.addressModeU = sci.addressModeV = sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    if (createSampler_(info_.device, &sci, nullptr, &sampler_) != VK_SUCCESS) return false;
+    if (createSampler_(info_.device, &sci, nullptr, &sampler_) != VK_SUCCESS) {
+        DestroyGpu();
+        return false;
+    }
 
     VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     pool.queueFamilyIndex = info_.queueFamily;
-    if (createPool_(info_.device, &pool, nullptr, &cmdPool_) != VK_SUCCESS) return false;
+    if (createPool_(info_.device, &pool, nullptr, &cmdPool_) != VK_SUCCESS) {
+        DestroyGpu();
+        return false;
+    }
 
     const uint8_t white[4] = {255, 255, 255, 255};
-    if (!UploadImage(white, 1, 1, 4, whiteImage_, whiteMemory_, whiteView_)) return false;
+    if (!UploadImage(white, 1, 1, 4, whiteImage_, whiteMemory_, whiteView_)) {
+        DestroyGpu();
+        return false;
+    }
     gpuReady_ = true;
     return true;
 }
 
 void VulkanRenderer::DestroyGpu() {
-    if (!info_.device || !deviceWait_) {
-        gpuReady_ = false;
-        return;
-    }
-    deviceWait_(info_.device);
+    const VkDevice dev = info_.device;
+    // Safe after a partial EnsureDevice: every call is guarded, so a failed
+    // step never leaks the ones that succeeded.
+    if (dev && deviceWait_) deviceWait_(dev);
+
+    auto killView = [&](VkImageView& view) {
+        if (dev && destroyView_ && view) destroyView_(dev, view, nullptr);
+        view = VK_NULL_HANDLE;
+    };
     auto killImage = [&](VkImage& image, VkDeviceMemory& mem, VkImageView& view) {
-        if (view) destroyView_(info_.device, view, nullptr);
-        if (image) destroyImage_(info_.device, image, nullptr);
-        if (mem) freeMem_(info_.device, mem, nullptr);
-        view = VK_NULL_HANDLE; image = VK_NULL_HANDLE; mem = VK_NULL_HANDLE;
+        killView(view);
+        if (dev && destroyImage_ && image) destroyImage_(dev, image, nullptr);
+        if (dev && freeMem_ && mem) freeMem_(dev, mem, nullptr);
+        image = VK_NULL_HANDLE;
+        mem = VK_NULL_HANDLE;
     };
     killImage(fontImage_, fontMemory_, fontView_);
     killImage(whiteImage_, whiteMemory_, whiteView_);
-    if (vertexBuffer_) destroyBuffer_(info_.device, vertexBuffer_, nullptr);
-    if (vertexMemory_) freeMem_(info_.device, vertexMemory_, nullptr);
-    vertexBuffer_ = VK_NULL_HANDLE; vertexMemory_ = VK_NULL_HANDLE; vertexCapacity_ = 0;
-    if (cmdPool_) destroyPool_(info_.device, cmdPool_, nullptr);
-    if (sampler_) destroySampler_(info_.device, sampler_, nullptr);
-    if (descPool_) destroyDescPool_(info_.device, descPool_, nullptr);
-    if (pipeline_) destroyPipe_(info_.device, pipeline_, nullptr);
-    if (pipelineLayout_) destroyPipeLayout_(info_.device, pipelineLayout_, nullptr);
-    if (setLayout_) destroySetLayout_(info_.device, setLayout_, nullptr);
-    if (vert_) destroyShader_(info_.device, vert_, nullptr);
-    if (frag_) destroyShader_(info_.device, frag_, nullptr);
+    for (FrameSlot& slot : slots_) {
+        if (dev && destroyBuffer_ && slot.buffer) destroyBuffer_(dev, slot.buffer, nullptr);
+        if (dev && freeMem_ && slot.memory) freeMem_(dev, slot.memory, nullptr);
+        slot = FrameSlot{};
+    }
+    slots_.clear();
+    if (dev && destroyPool_ && cmdPool_) destroyPool_(dev, cmdPool_, nullptr);
+    if (dev && destroySampler_ && sampler_) destroySampler_(dev, sampler_, nullptr);
+    if (dev && destroyDescPool_ && descPool_) destroyDescPool_(dev, descPool_, nullptr);
+    if (dev && destroyPipe_ && pipeline_) destroyPipe_(dev, pipeline_, nullptr);
+    if (dev && destroyPipeLayout_ && pipelineLayout_) destroyPipeLayout_(dev, pipelineLayout_, nullptr);
+    if (dev && destroySetLayout_ && setLayout_) destroySetLayout_(dev, setLayout_, nullptr);
+    if (dev && destroyShader_ && vert_) destroyShader_(dev, vert_, nullptr);
+    if (dev && destroyShader_ && frag_) destroyShader_(dev, frag_, nullptr);
     cmdPool_ = VK_NULL_HANDLE;
     sampler_ = VK_NULL_HANDLE;
     descPool_ = VK_NULL_HANDLE;
@@ -279,10 +327,14 @@ void VulkanRenderer::DestroyGpu() {
     vert_ = VK_NULL_HANDLE;
     frag_ = VK_NULL_HANDLE;
     pipelinePass_ = VK_NULL_HANDLE;
-    descSet_ = VK_NULL_HANDLE;
+    frameCounter_ = 0;
     gpuReady_ = false;
     fontPtr_ = nullptr;
     fontRevision_ = 0;
+}
+
+void VulkanRenderer::WaitIdle() {
+    if (info_.device && deviceWait_) deviceWait_(info_.device);
 }
 
 bool VulkanRenderer::UploadImage(const uint8_t* pixels, int w, int h, int channels,
@@ -298,6 +350,22 @@ bool VulkanRenderer::UploadImage(const uint8_t* pixels, int w, int h, int channe
 
     VkBuffer staging = VK_NULL_HANDLE;
     VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+    // Free whatever the caller already owns: a failed upload must not leak.
+    auto freeStaging = [&]() {
+        if (staging) destroyBuffer_(info_.device, staging, nullptr);
+        if (stagingMem) freeMem_(info_.device, stagingMem, nullptr);
+        staging = VK_NULL_HANDLE;
+        stagingMem = VK_NULL_HANDLE;
+    };
+    auto freeTarget = [&]() {
+        if (view) destroyView_(info_.device, view, nullptr);
+        if (image) destroyImage_(info_.device, image, nullptr);
+        if (memory) freeMem_(info_.device, memory, nullptr);
+        view = VK_NULL_HANDLE;
+        image = VK_NULL_HANDLE;
+        memory = VK_NULL_HANDLE;
+    };
+
     VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bci.size = bytes;
     bci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -308,11 +376,14 @@ bool VulkanRenderer::UploadImage(const uint8_t* pixels, int w, int h, int channe
                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     if (type == 0xFFFFFFFFu)
         type = FindMemory(mem_, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-    if (type == 0xFFFFFFFFu) return false;
+    if (type == 0xFFFFFFFFu) { freeStaging(); return false; }
     VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
     mai.allocationSize = req.size;
     mai.memoryTypeIndex = type;
-    if (allocMem_(info_.device, &mai, nullptr, &stagingMem) != VK_SUCCESS) return false;
+    if (allocMem_(info_.device, &mai, nullptr, &stagingMem) != VK_SUCCESS) {
+        freeStaging();
+        return false;
+    }
     bindBuf_(info_.device, staging, stagingMem, 0);
     void* mapped = nullptr;
     mapMem_(info_.device, stagingMem, 0, req.size, 0, &mapped);
@@ -335,13 +406,25 @@ bool VulkanRenderer::UploadImage(const uint8_t* pixels, int w, int h, int channe
     ici.tiling = VK_IMAGE_TILING_OPTIMAL;
     ici.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (createImage_(info_.device, &ici, nullptr, &image) != VK_SUCCESS) return false;
+    if (createImage_(info_.device, &ici, nullptr, &image) != VK_SUCCESS) {
+        freeStaging();
+        return false;
+    }
     getImgReqs_(info_.device, image, &req);
     type = FindMemory(mem_, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (type == 0xFFFFFFFFu) type = FindMemory(mem_, req.memoryTypeBits, 0);
+    if (type == 0xFFFFFFFFu) {
+        freeTarget();
+        freeStaging();
+        return false;
+    }
     mai.allocationSize = req.size;
     mai.memoryTypeIndex = type;
-    if (allocMem_(info_.device, &mai, nullptr, &memory) != VK_SUCCESS) return false;
+    if (allocMem_(info_.device, &mai, nullptr, &memory) != VK_SUCCESS) {
+        freeTarget();
+        freeStaging();
+        return false;
+    }
     bindImg_(info_.device, image, memory, 0);
 
     VkCommandBuffer cmd = VK_NULL_HANDLE;
@@ -349,7 +432,11 @@ bool VulkanRenderer::UploadImage(const uint8_t* pixels, int w, int h, int channe
     cai.commandPool = cmdPool_;
     cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cai.commandBufferCount = 1;
-    if (allocCmds_(info_.device, &cai, &cmd) != VK_SUCCESS) return false;
+    if (allocCmds_(info_.device, &cai, &cmd) != VK_SUCCESS) {
+        freeTarget();
+        freeStaging();
+        return false;
+    }
     VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     beginCmd_(cmd, &bi);
@@ -377,43 +464,73 @@ bool VulkanRenderer::UploadImage(const uint8_t* pixels, int w, int h, int channe
     endCmd_(cmd);
     VkFence fence = VK_NULL_HANDLE;
     VkFenceCreateInfo fi{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    createFence_(info_.device, &fi, nullptr, &fence);
+    if (createFence_(info_.device, &fi, nullptr, &fence) != VK_SUCCESS) {
+        freeTarget();
+        freeStaging();
+        return false;
+    }
     VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     si.commandBufferCount = 1;
     si.pCommandBuffers = &cmd;
-    queueSubmit_(info_.queue, 1, &si, fence);
-    waitFences_(info_.device, 1, &fence, VK_TRUE, UINT64_MAX);
+    const bool submitted = queueSubmit_(info_.queue, 1, &si, fence) == VK_SUCCESS;
+    if (submitted) waitFences_(info_.device, 1, &fence, VK_TRUE, UINT64_MAX);
     destroyFence_(info_.device, fence, nullptr);
-    destroyBuffer_(info_.device, staging, nullptr);
-    freeMem_(info_.device, stagingMem, nullptr);
+    freeStaging();
+    if (!submitted) {
+        freeTarget();
+        return false;
+    }
 
     VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     vci.image = image;
     vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
     vci.format = VK_FORMAT_R8G8B8A8_UNORM;
     vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-    return createView_(info_.device, &vci, nullptr, &view) == VK_SUCCESS;
+    if (createView_(info_.device, &vci, nullptr, &view) != VK_SUCCESS) {
+        freeTarget();
+        return false;
+    }
+    return true;
 }
 
 void VulkanRenderer::Prepare(const FontAtlas* atlas) {
     if (!EnsureDevice()) return;
     if (!atlas || !atlas->Loaded() || !atlas->Pixels()) return;
     if (fontView_ && fontPtr_ == atlas && fontRevision_ == atlas->Revision()) return;
-    if (fontView_) destroyView_(info_.device, fontView_, nullptr);
-    if (fontImage_) destroyImage_(info_.device, fontImage_, nullptr);
-    if (fontMemory_) freeMem_(info_.device, fontMemory_, nullptr);
-    fontView_ = VK_NULL_HANDLE; fontImage_ = VK_NULL_HANDLE; fontMemory_ = VK_NULL_HANDLE;
+    if (fontView_ || fontImage_ || fontMemory_) {
+        // The old image may still be sampled by an in-flight frame; the host
+        // calls Prepare() outside the pass, so a device wait is affordable here.
+        WaitIdle();
+        if (fontView_) destroyView_(info_.device, fontView_, nullptr);
+        if (fontImage_) destroyImage_(info_.device, fontImage_, nullptr);
+        if (fontMemory_) freeMem_(info_.device, fontMemory_, nullptr);
+        fontView_ = VK_NULL_HANDLE; fontImage_ = VK_NULL_HANDLE; fontMemory_ = VK_NULL_HANDLE;
+        fontPtr_ = nullptr;
+        fontRevision_ = 0;
+    }
     if (UploadImage(atlas->Pixels(), atlas->Width(), atlas->Height(), atlas->Channels(),
                     fontImage_, fontMemory_, fontView_)) {
         fontPtr_ = atlas;
         fontRevision_ = atlas->Revision();
+    } else {
+        std::fprintf(stderr, "[aris-ui] vulkan: font atlas upload failed\n");
     }
 }
 
 void VulkanRenderer::Draw(const CommandQueue& queue, const FontAtlas* atlas,
                           float width, float height) {
     if (!commandBuffer_ || width <= 0.f || height <= 0.f) return;
-    if (!EnsureDevice() || pipelinePass_ != info_.renderPass) return;
+    if (!EnsureDevice()) return;
+    if (pipelinePass_ != info_.renderPass) {
+        // Swapchain recreation invalidated the pass the pipeline was built for.
+        if (!passWarned_) {
+            passWarned_ = true;
+            std::fprintf(stderr, "[aris-ui] vulkan: render pass changed, call Init() again to rebuild the UI pipeline\n");
+        }
+        return;
+    }
+    if (slots_.empty()) return;
+    FrameSlot& slot = slots_[frameCounter_++ % slots_.size()];
 
     if (!scratch_) scratch_ = std::make_unique<SpanScratch>();
     BuildUiSpans(queue, *scratch_);
@@ -431,30 +548,50 @@ void VulkanRenderer::Draw(const CommandQueue& queue, const FontAtlas* atlas,
     if (all_.empty()) return;
 
     const VkDeviceSize bytes = all_.size() * sizeof(UiVertex);
-    if (vertexCapacity_ < bytes) {
-        if (vertexBuffer_) destroyBuffer_(info_.device, vertexBuffer_, nullptr);
-        if (vertexMemory_) freeMem_(info_.device, vertexMemory_, nullptr);
+    if (slot.capacity < bytes) {
+        // Growing drops the old buffer, which an in-flight frame may still read.
+        WaitIdle();
+        if (slot.buffer) destroyBuffer_(info_.device, slot.buffer, nullptr);
+        if (slot.memory) freeMem_(info_.device, slot.memory, nullptr);
+        slot.buffer = VK_NULL_HANDLE;
+        slot.memory = VK_NULL_HANDLE;
+        slot.capacity = 0;
         VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bci.size = bytes;
         bci.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        createBuffer_(info_.device, &bci, nullptr, &vertexBuffer_);
+        if (createBuffer_(info_.device, &bci, nullptr, &slot.buffer) != VK_SUCCESS) {
+            std::fprintf(stderr, "[aris-ui] vulkan: vertex buffer creation failed\n");
+            return;
+        }
         VkMemoryRequirements req{};
-        getBufReqs_(info_.device, vertexBuffer_, &req);
+        getBufReqs_(info_.device, slot.buffer, &req);
         uint32_t type = FindMemory(mem_, req.memoryTypeBits,
                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         if (type == 0xFFFFFFFFu)
             type = FindMemory(mem_, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        if (type == 0xFFFFFFFFu) {
+            std::fprintf(stderr, "[aris-ui] vulkan: no host-visible memory for the vertex buffer\n");
+            destroyBuffer_(info_.device, slot.buffer, nullptr);
+            slot.buffer = VK_NULL_HANDLE;
+            return;
+        }
         VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
         mai.allocationSize = req.size;
         mai.memoryTypeIndex = type;
-        allocMem_(info_.device, &mai, nullptr, &vertexMemory_);
-        bindBuf_(info_.device, vertexBuffer_, vertexMemory_, 0);
-        vertexCapacity_ = req.size;
+        if (allocMem_(info_.device, &mai, nullptr, &slot.memory) != VK_SUCCESS) {
+            std::fprintf(stderr, "[aris-ui] vulkan: vertex buffer allocation failed\n");
+            destroyBuffer_(info_.device, slot.buffer, nullptr);
+            slot.buffer = VK_NULL_HANDLE;
+            return;
+        }
+        bindBuf_(info_.device, slot.buffer, slot.memory, 0);
+        slot.capacity = req.size;
     }
     void* mapped = nullptr;
-    mapMem_(info_.device, vertexMemory_, 0, bytes, 0, &mapped);
+    mapMem_(info_.device, slot.memory, 0, bytes, 0, &mapped);
+    if (!mapped) return;
     std::memcpy(mapped, all_.data(), static_cast<size_t>(bytes));
-    unmapMem_(info_.device, vertexMemory_);
+    unmapMem_(info_.device, slot.memory);
 
     const float pxRange = (atlas && atlas->Loaded() && atlas->GenerationFontSize() > 0.f)
         ? atlas->PxRange() : 0.f;
@@ -464,7 +601,7 @@ void VulkanRenderer::Draw(const CommandQueue& queue, const FontAtlas* atlas,
     VkViewport viewport{0.f, 0.f, width, height, 0.f, 1.f};
     cmdViewport_(commandBuffer_, 0, 1, &viewport);
     VkDeviceSize offset = 0;
-    cmdBindVerts_(commandBuffer_, 0, 1, &vertexBuffer_, &offset);
+    cmdBindVerts_(commandBuffer_, 0, 1, &slot.buffer, &offset);
 
     VkImageView bound = VK_NULL_HANDLE;
     uint32_t first = 0;
@@ -473,18 +610,34 @@ void VulkanRenderer::Draw(const CommandQueue& queue, const FontAtlas* atlas,
         bound = view;
         VkDescriptorImageInfo ii{sampler_, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        write.dstSet = descSet_;
+        write.dstSet = slot.set;
         write.dstBinding = 0;
         write.descriptorCount = 1;
         write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write.pImageInfo = &ii;
         updateSets_(info_.device, 1, &write, 0, nullptr);
         cmdBindSets_(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
-                     0, 1, &descSet_, 0, nullptr);
+                     0, 1, &slot.set, 0, nullptr);
     };
 
     for (const UiSpan& span : spans) {
         if (span.backdrop || span.verts.empty()) continue;
+        const uint32_t count = static_cast<uint32_t>(span.verts.size());
+        // Vulkan scissor rectangles must stay inside the render area; a panel
+        // dragged off-screen produces clips that GL would silently trim.
+        VkRect2D scissor{{0, 0}, {static_cast<uint32_t>(width), static_cast<uint32_t>(height)}};
+        if (span.scissor) {
+            const int32_t x0 = (int32_t)std::floor(std::max(span.scissorX, 0.f));
+            const int32_t y0 = (int32_t)std::floor(std::max(span.scissorY, 0.f));
+            const int32_t x1 = (int32_t)std::ceil(std::min(span.scissorX + span.scissorW, width));
+            const int32_t y1 = (int32_t)std::ceil(std::min(span.scissorY + span.scissorH, height));
+            if (x1 <= x0 || y1 <= y0) {
+                first += count;      // fully clipped: skip the draw, keep the offsets
+                continue;
+            }
+            scissor.offset = {x0, y0};
+            scissor.extent = {static_cast<uint32_t>(x1 - x0), static_cast<uint32_t>(y1 - y0)};
+        }
         const bool glyph = span.atlasId != 0 && fontView_;
         bindView(glyph ? fontView_ : whiteView_);
         float range = 0.f;
@@ -492,17 +645,10 @@ void VulkanRenderer::Draw(const CommandQueue& queue, const FontAtlas* atlas,
         float push[4] = {width, height, range, 0.f};
         cmdPush_(commandBuffer_, pipelineLayout_,
                  VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 16, push);
-        VkRect2D scissor{{0, 0}, {static_cast<uint32_t>(width), static_cast<uint32_t>(height)}};
-        if (span.scissor) {
-            scissor.offset = {static_cast<int32_t>(span.scissorX), static_cast<int32_t>(span.scissorY)};
-            scissor.extent = {static_cast<uint32_t>(std::max(span.scissorW, 0.f)),
-                              static_cast<uint32_t>(std::max(span.scissorH, 0.f))};
-        }
         cmdScissor_(commandBuffer_, 0, 1, &scissor);
-        cmdDraw_(commandBuffer_, static_cast<uint32_t>(span.verts.size()), 1, first, 0);
-        first += static_cast<uint32_t>(span.verts.size());
+        cmdDraw_(commandBuffer_, count, 1, first, 0);
+        first += count;
     }
-    (void)atlas;
 }
 
 } // namespace ui

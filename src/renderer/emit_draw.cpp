@@ -51,6 +51,7 @@ void BuildUiSpans(const CommandQueue& queue, SpanScratch& scratch) {
     UiSpan* cur = nullptr;
     Rect clipStack[32];
     int clipDepth = 0;
+    int droppedClips = 0;   // pushes beyond clipStack, counted so pops stay balanced
 
     // Open (or reuse) the next span slot and stamp it with the current clip
     // stack. Existing vector capacity is kept across frames.
@@ -84,10 +85,13 @@ void BuildUiSpans(const CommandQueue& queue, SpanScratch& scratch) {
             close();
             if (clipDepth < 32)
                 clipStack[clipDepth++] = Rect(cmd.pos.x, cmd.pos.y, cmd.size.x, cmd.size.y);
+            else
+                ++droppedClips;
             break;
         case DrawCommand::Type::ClipPop:
             close();
-            if (clipDepth > 0) --clipDepth;
+            if (droppedClips > 0) --droppedClips;   // pop the dropped push, not a live one
+            else if (clipDepth > 0) --clipDepth;
             break;
         case DrawCommand::Type::Backdrop: {
             close();

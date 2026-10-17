@@ -20,8 +20,8 @@
 namespace ui {
 
 // ---------------------------------------------------------------------------
-// Shaders — #version 330 core (GL 3.3). Legacy 150-core / 2.1 variants are a
-// future stage; the source is kept in one place to make variants easy.
+// Shaders — #version 330 core (GL 3.3). Initialize() swaps the directive down
+// to 330 / 150 when a compatibility context rejects the primary version.
 // ---------------------------------------------------------------------------
 namespace shaders {
 
@@ -276,7 +276,7 @@ bool Batcher::Initialize() {
     int major = 1, minor = 0;
     const char* ver = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     if (ver) std::sscanf(ver, "%d.%d", &major, &minor);
-    std::fprintf(stderr, "[aris-ui] GL_VERSION %s\n", ver ? ver : "(null)");
+    if (std::getenv("ARIS_DEBUG")) std::fprintf(stderr, "[aris-ui] GL_VERSION %s\n", ver ? ver : "(null)");
 
     // layout(location) needs GLSL 150. Don't hand a 2.1 driver a 330 shader;
     // some of them never return from glCompileShader.
@@ -451,9 +451,13 @@ void Batcher::Draw(const CommandQueue& queue, const FontAtlas* atlas,
     bool scissorOn = false;
     for (const UiSpan& span : spans) {
         if (span.backdrop) {
+            // A fully clipped-out backdrop must draw nothing. Passing an empty
+            // clip to ApplyScissor would disable the scissor test instead and
+            // composite the blur over the whole framebuffer.
+            if (span.scissor && (span.scissorW <= 0.f || span.scissorH <= 0.f)) continue;
             Rect clipStack[1];
             int depth = 0;
-            if (span.scissor && span.scissorW > 0.f && span.scissorH > 0.f) {
+            if (span.scissor) {
                 clipStack[0] = Rect(span.scissorX, span.scissorY, span.scissorW, span.scissorH);
                 depth = 1;
             }

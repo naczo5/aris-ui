@@ -1,5 +1,7 @@
 # aris-ui
 
+**English** | [简体中文](README.zh-CN.md)
+
 **A more beautiful ImGui replacement. Optimised for agents.**
 
 A lightweight, modern, drop-in C++20 immediate-mode UI library for OpenGL overlay
@@ -8,6 +10,18 @@ application. Renders widgets as analytically anti-aliased signed-distance fields
 text from offline-generated MSDF atlases, lays out panels with Yoga flexbox, and leaves
 the host's OpenGL state exactly as it found it. No web engine, no resource hogging, no
 sloppy defaults.
+
+## Preview
+
+<p align="center">
+  <img src="docs/assets/clickgui.png" width="49%" alt="Aurora glass ClickGUI with a translucent backdrop and module cards">
+  <img src="docs/assets/hud.png" width="49%" alt="Competitive in-game HUD: target card, watermark, hotbar and active potions">
+  <img src="docs/assets/panel.png" width="49%" alt="Widget panel with SDF buttons, toggles and sliders">
+  <img src="docs/assets/text.png" width="49%" alt="MSDF type specimen rendered at several pixel sizes">
+</p>
+
+Every image above is a real framebuffer dump produced headlessly by `make preview`
+(15 named scenes); the full gallery lives on the [docs landing page](docs/index.html).
 
 ## Tenets
 
@@ -66,9 +80,9 @@ ctx.Render();   // flushes the command queue through the GL backend
 
 - **[AGENTS.md](AGENTS.md)** — repo map, verification loop, and known gotchas.
 - **`make preview`** — deterministic headless snapshots (`examples/scene_preview`,
-  8 named scenes with simulated hover/press input) → `previews/*.png`. Render,
+  15 named scenes with simulated hover/press input) → `previews/*.png`. Render,
   then *look* at the PNGs.
-- **`make test`** — 30 unit tests via ctest, no external test framework.
+- **`make test`** — 38 unit tests via ctest, no external test framework.
 - **`docs/llms.txt`** and **`docs/llms-full.txt`** — agent-oriented doc indexes;
   every docs page also has a raw markdown source in `docs-src/`.
 

@@ -55,11 +55,17 @@ float alpha = clamp(sd * screenPxRange + 0.5, 0.0, 1.0);
 <h2 id="clipping">Clipping</h2>
 <p><code>ClipPush</code>/<code>ClipPop</code> commands map to <code>glScissor</code> in y-down pixel coordinates. The queue tracks depth (max 32) and pairs pushes/pops; nested panels and text clipping compose naturally.</p>
 <h2 id="notes-for-custom-backends">Notes for custom backends</h2>
-<p>The command queue is pure data (see <code>include/ui/renderer/command_queue.hpp</code>) — replay it with anything. The GL batcher is a reference backend. The vertex format packs: rect (4f), radii (4f), color (4 x u8), border color (4 x u8), params (4f: border width, shadow spread, shadow blur, is-glyph), shadow (4f: offset xy, opacity, quad padding), uv (4f), position (2f).</p>
+<p>The command queue is pure data (see <code>include/ui/renderer/command_queue.hpp</code>). <code>Context::SetDrawBackend()</code> sends <code>Render()</code> at a <code>DrawBackend</code>. With no backend set, the OpenGL batcher runs inside <code>GlStateGuard</code>.</p>
+<p><code>FontAtlas::Load</code> keeps the atlas on the CPU (<code>Pixels()</code>, <code>Revision()</code>). Each backend uploads. <code>TextureId()</code> is a stable batch key, not a GL name.</p>
+<p><code>DrawCircle</code> is a rounded rect. <code>DrawTriangle</code> is its own command (filled, or stroked when <code>stroke</code> &gt; 0). Lines and triangles share the quad SDF path (<code>params.w</code> 2 and 3).</p>
+<p><code>VulkanRenderer</code> records into a command buffer the host already put inside its render pass. Call <code>Prepare(atlas)</code> before the pass so font uploads are not issued mid-pass. Backdrop blur is skipped on Vulkan.</p>
+<p>Fill in <code>VulkanCreateInfo</code> fully: <code>renderPass</code>, <code>subpass</code>, <code>sampleCount</code> must describe the pass the UI records in, and <code>framesInFlight</code> must match how many frames the host keeps in flight (the renderer rotates its vertex buffer and descriptor set across that many slots). Recreating the render pass — a swapchain resize — invalidates the pipeline: call <code>Init()</code> again. <code>Prepare</code> and <code>ReleaseDevice</code> wait for the device because they replace images.</p>
+<p><code>Context::DiscardFrame()</code> drops the recorded commands without drawing (the host decided not to present this frame); <code>Context::ReleaseGraphics()</code> drops the GPU objects of the active backend, for when the GL context or Vulkan device goes away. The CPU-side atlas survives both, so the next frame re-uploads.</p>
+<p>The shared vertex is <code>ui::UiVertex</code> (120 bytes). OpenGL tries <code>#version 330 core</code>, then <code>330</code>, then <code>150</code>, so a compatibility context can still compile the shader.</p>
 </main>
 <footer class="site">
   <span><b>aris-ui</b> — MIT licensed · C++20 · OpenGL 3.3 · High-Performance Overlays</span>
-  <span>Updated 2026-10-13 · <a href="https://github.com/naczo5/aris-ui">source code</a></span>
+  <span>Updated 2026-10-17 · <a href="https://github.com/naczo5/aris-ui">source code</a></span>
 </footer>
 </body>
 </html>

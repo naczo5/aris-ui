@@ -324,10 +324,10 @@ def write_llms(pages_md: dict) -> None:
     lines.append("- [llms-full.txt](llms-full.txt): this entire documentation set in one file")
     lines.append("- Markdown sources live in `docs-src/` inside the repository")
     lines.append("")
-    with open(os.path.join(OUT, "llms.txt"), "w") as f:
+    with open(os.path.join(OUT, "llms.txt"), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines))
 
-    with open(os.path.join(OUT, "llms-full.txt"), "w") as f:
+    with open(os.path.join(OUT, "llms-full.txt"), "w", encoding="utf-8", newline="\n") as f:
         for fname, title in PAGES:
             f.write(f"# {title}\n\n")
             f.write(pages_md[fname].strip())
@@ -342,14 +342,14 @@ def main() -> int:
         if not os.path.exists(path):
             print(f"missing docs-src/{fname}", file=sys.stderr)
             return 1
-        md = open(path).read()
+        md = open(path, encoding="utf-8").read()
         pages_md[fname] = md
         out_name = fname[:-3] + ".html"
-        with open(os.path.join(OUT, out_name), "w") as f:
+        with open(os.path.join(OUT, out_name), "w", encoding="utf-8", newline="\n") as f:
             f.write(render_page(title, md_to_html(md)))
         print(f"wrote docs/{out_name}")
 
-    with open(os.path.join(OUT, "style.css"), "w") as f:
+    with open(os.path.join(OUT, "style.css"), "w", encoding="utf-8", newline="\n") as f:
         f.write(CSS)
     print("wrote docs/style.css")
 

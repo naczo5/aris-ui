@@ -41,6 +41,7 @@ make test        # build + ctest (unit tests, no GL needed)
 make preview     # headless render of all UI scenes → previews/*.png
 make demo        # interactive runner window
 make docs        # regenerate docs/*.html from docs-src/*.md
+make spv         # regenerate src/renderer/vk_spv.inc from the Vulkan GLSL
 make verify      # build + test + preview — run after EVERY change
 ```
 
@@ -77,7 +78,16 @@ Do not claim a rendering change works without having viewed a preview PNG.
 - **Vulkan:** `VulkanRenderer::Prepare(atlas)` uploads fonts and must run outside
   a render pass. `SetCommandBuffer()` then `Context::Render()` records inside the
   host pass. Backdrop blur is skipped. Functions come from the host loader; the
-  library does not link `vulkan-1`.
+  library does not link `vulkan-1`. The pipeline is built for the `renderPass`,
+  `subpass` and `sampleCount` from `VulkanCreateInfo`; call `Init()` again after
+  the host recreates its render pass. `Draw()` rotates `framesInFlight`
+  vertex/descriptor slots, so the host must not have more frames in flight than
+  that.
+- **Vulkan shaders live twice:** the OpenGL GLSL is the raw string in
+  `src/renderer/batcher.cpp`, the Vulkan copy is `src/renderer/shaders/ui.vert|ui.frag`
+  compiled into the checked-in `src/renderer/vk_spv.inc`. After editing either,
+  run `make spv` (needs glslang in `tools/glslang/bin` + Python; CMake does not
+  generate the `.inc`). `make spv CHECK=1` fails if the `.inc` is stale.
 - **Scene previews:** each scene gets a fresh `ui::Context`; the harness
   clears the framebuffer every frame. Simulated input is injected *before*
   `BeginFrame` and eases over `--warmup` frames. Overlay scenes (hud,

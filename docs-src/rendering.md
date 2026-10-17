@@ -78,5 +78,17 @@ or stroked when `stroke` > 0). Lines and triangles share the quad SDF path
 its render pass. Call `Prepare(atlas)` before the pass so font uploads are
 not issued mid-pass. Backdrop blur is skipped on Vulkan.
 
+Fill in `VulkanCreateInfo` fully: `renderPass`, `subpass`, `sampleCount` must
+describe the pass the UI records in, and `framesInFlight` must match how many
+frames the host keeps in flight (the renderer rotates its vertex buffer and
+descriptor set across that many slots). Recreating the render pass — a
+swapchain resize — invalidates the pipeline: call `Init()` again. `Prepare`
+and `ReleaseDevice` wait for the device because they replace images.
+
+`Context::DiscardFrame()` drops the recorded commands without drawing (the
+host decided not to present this frame); `Context::ReleaseGraphics()` drops the
+GPU objects of the active backend, for when the GL context or Vulkan device
+goes away. The CPU-side atlas survives both, so the next frame re-uploads.
+
 The shared vertex is `ui::UiVertex` (120 bytes). OpenGL tries `#version 330 core`,
 then `330`, then `150`, so a compatibility context can still compile the shader.

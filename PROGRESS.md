@@ -101,9 +101,11 @@ criteria; statuses are updated as work completes.
 - [x] `FontAtlas` keeps MSDF pixels on the CPU; renderers upload
 - [x] `DrawBackend` so `Context::Render()` can target something other than the built-in GL batcher
 - [x] `VulkanRenderer` records into a host render pass (no swapchain). Rects, glyphs, lines, circles, triangles, clips. Backdrop blur stays OpenGL-only
+- [x] `VulkanRenderer` rotates `framesInFlight` vertex/descriptor slots, honours `subpass`/`sampleCount`, and clamps scissor rects to the render area
 - [x] `DrawTriangle` / `DrawCommand::Type::Triangle`
 - [x] OpenGL shader falls back from `#version 330 core` to `330` then `150` when a compatibility context rejects the primary version
-- **Acceptance:** `aris_tests` passes. Vulkan path compiles against vendored headers and loads functions through a host callback.
+- [x] `BuildUiSpans` (the shared command→vertex span pass) covered by unit tests; `make spv` regenerates the checked-in Vulkan SPIR-V
+- **Acceptance:** `aris_tests` passes. Vulkan path compiles against vendored headers and loads functions through a host callback. Not yet exercised against a real swapchain pass.
 
 ## Stage 10+ — Roadmap (pending)
 - [ ] **Stage 11 — Input backends:** Win32 `WndProc` adapter, standalone GLFW adapter module; cursor grab/ungrab controller (LWJGL2 + GLFW modes)

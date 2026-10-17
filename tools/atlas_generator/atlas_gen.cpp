@@ -3,6 +3,8 @@
 #include <msdfgen.h>
 #include <msdfgen-ext.h>
 
+#include <nlohmann/json.hpp>
+
 #include "stb_image_write.h"
 
 #include <algorithm>
@@ -19,6 +21,35 @@ namespace {
 struct Placement {
     int x = 0, y = 0, w = 0, h = 0;   // PNG pixel coords, top-left origin
 };
+
+// JSON-escape a string for embedding in the hand-written metadata document.
+// Windows font paths contain backslashes; writing them raw produced invalid
+// JSON ("\U" is not an escape) and every FontAtlas::Load failed at runtime.
+std::string EscapeJson(const std::string& text) {
+    std::string out;
+    out.reserve(text.size() + 8);
+    for (const unsigned char c : text) {
+        switch (c) {
+        case '\\': out += "\\\\"; break;
+        case '"':  out += "\\\""; break;
+        case '\b': out += "\\b"; break;
+        case '\f': out += "\\f"; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        default:
+            if (c < 0x20) {
+                char buf[8];
+                std::snprintf(buf, sizeof(buf), "\\u%04X", static_cast<unsigned>(c));
+                out += buf;
+            } else {
+                out += static_cast<char>(c);
+            }
+            break;
+        }
+    }
+    return out;
+}
 
 // Simple shelf packer.
 class ShelfPacker {
@@ -242,7 +273,7 @@ bool WriteFiles(const std::string& fontPath, const std::string& outPrefix,
     json << "{\n";
     json << "  \"atlas\": {\"width\": " << result.width << ", \"height\": " << result.height << "},\n";
     json << "  \"pxRange\": " << params.pxRange << ",\n";
-    json << "  \"font\": \"" << fontPath << "\",\n";
+    json << "  \"font\": \"" << EscapeJson(fontPath) << "\",\n";
     json << "  \"metrics\": {\"fontSize\": " << params.fontSize
          << ", \"lineHeight\": " << result.lineHeight
          << ", \"ascender\": " << result.ascender
@@ -260,12 +291,23 @@ bool WriteFiles(const std::string& fontPath, const std::string& outPrefix,
     }
     json << "  ]\n}\n";
 
+    const std::string payload = json.str();
+    // Safety net: the runtime loader hard-fails on malformed metadata, so never
+    // write a document that does not parse as JSON.
+    try {
+        const nlohmann::json parsed = nlohmann::json::parse(payload);
+        (void)parsed;
+    } catch (const std::exception& e) {
+        error = std::string("generated atlas JSON is not valid JSON: ") + e.what();
+        return false;
+    }
+
     std::ofstream out(jsonPath);
     if (!out) {
         error = "cannot write " + jsonPath;
         return false;
     }
-    out << json.str();
+    out << payload;
     return true;
 }
 
@@ -284,7 +326,7 @@ bool GenerateAndWrite(const std::string& fontPath, const std::string& outPrefix,
             // Cached only if it was built from this exact font file.
             std::stringstream ss;
             ss << jsonFile.rdbuf();
-            if (ss.str().find("\"font\": \"" + fontPath + "\"") != std::string::npos)
+            if (ss.str().find("\"font\": \"" + EscapeJson(fontPath) + "\"") != std::string::npos)
                 return true;   // cached
         }
     }

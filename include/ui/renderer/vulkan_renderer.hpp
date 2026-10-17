@@ -3,13 +3,17 @@
 // swapchain. Call Prepare() outside the pass (font uploads), then set the
 // command buffer and Context::Render() inside the pass.
 #include <cstdint>
+#include <memory>
+#include <vector>
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include "ui/renderer/draw_backend.hpp"
+#include "ui/renderer/ui_vertex.hpp"
 
 namespace ui {
 
 class FontAtlas;
+struct SpanScratch;
 
 struct VulkanLoader {
     void* user = nullptr;
@@ -29,7 +33,7 @@ struct VulkanCreateInfo {
 
 class VulkanRenderer : public DrawBackend {
 public:
-    VulkanRenderer() = default;
+    VulkanRenderer();
     ~VulkanRenderer() override;
 
     VulkanRenderer(const VulkanRenderer&) = delete;
@@ -82,6 +86,10 @@ private:
     const FontAtlas* fontPtr_ = nullptr;
     std::uint64_t fontRevision_ = 0;
     bool blurWarned_ = false;
+
+    // Persistent per-frame scratch (spans + staging vertices).
+    std::unique_ptr<SpanScratch> scratch_;
+    std::vector<UiVertex> all_;
 
     PFN_vkGetPhysicalDeviceMemoryProperties getMemProps_ = nullptr;
     PFN_vkCreateShaderModule createShader_ = nullptr;

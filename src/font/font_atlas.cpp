@@ -38,6 +38,7 @@ bool FontAtlas::Load(const std::string& pngPath, const std::string& jsonPath) {
         return false;
     }
 
+    try {
     width_ = meta.at("atlas").at("width").get<int>();
     height_ = meta.at("atlas").at("height").get<int>();
     pxRange_ = meta.at("pxRange").get<float>();
@@ -87,6 +88,11 @@ bool FontAtlas::Load(const std::string& pngPath, const std::string& jsonPath) {
     }
     ++revision_;
     return true;
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "[aris-ui] FontAtlas: %s\n", e.what());
+        Unload();
+        return false;
+    }
 }
 
 bool FontAtlas::LoadTtf(const std::string& ttfPath, const std::string& cachePrefix,

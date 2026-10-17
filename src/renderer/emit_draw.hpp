@@ -18,6 +18,15 @@ struct UiSpan {
     std::vector<UiVertex> verts;
 };
 
-void BuildUiSpans(const CommandQueue& queue, std::vector<UiSpan>& spans);
+// Persistent per-renderer scratch: reusing the span vectors frame to frame
+// avoids re-allocating (and re-growing) every span's vertex buffer on every
+// frame, which showed up as per-frame hitch sources in overlay hosts.
+struct SpanScratch {
+    std::vector<UiSpan> spans;
+};
+
+// Fills scratch.spans from `queue`, reusing existing buffers. Spans stay valid
+// until the next call.
+void BuildUiSpans(const CommandQueue& queue, SpanScratch& scratch);
 
 } // namespace ui

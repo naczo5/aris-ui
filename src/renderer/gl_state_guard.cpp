@@ -1,6 +1,10 @@
 #include "ui/renderer/gl_state_guard.hpp"
 #include "glad/gl.h"
 
+#ifndef GL_ALPHA_TEST
+#define GL_ALPHA_TEST 0x0BC0
+#endif
+
 #include <cstring>
 
 namespace ui {
@@ -15,7 +19,7 @@ struct GlStateGuard::State {
     GLint readFramebuffer = 0;
     GLint renderbuffer = 0;
     GLint activeTexture = GL_TEXTURE0;
-    GLint texture2D[16] = {};
+    GLint texture0 = 0;
 
     GLboolean blendEnabled = GL_FALSE;
     GLboolean depthTestEnabled = GL_FALSE;
@@ -23,6 +27,7 @@ struct GlStateGuard::State {
     GLboolean scissorTestEnabled = GL_FALSE;
     GLboolean stencilTestEnabled = GL_FALSE;
     GLboolean ditherEnabled = GL_FALSE;
+    GLboolean alphaTestEnabled = GL_FALSE;
 
     GLint blendSrcRGB = 0, blendDstRGB = 0, blendSrcAlpha = 0, blendDstAlpha = 0;
     GLint blendEquationRGB = 0, blendEquationAlpha = 0;
@@ -50,11 +55,9 @@ GlStateGuard::GlStateGuard() : state_(new State()) {
     glGetIntegerv(GL_RENDERBUFFER_BINDING, &s.renderbuffer);
 
     glGetIntegerv(GL_ACTIVE_TEXTURE, &s.activeTexture);
-    const GLint maxUnits = 16;
-    for (GLint i = 0; i < maxUnits; ++i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &s.texture2D[i]);
-    }
+    // The UI only binds unit 0. Walking every unit stalls the GPU each frame.
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &s.texture0);
     glActiveTexture(s.activeTexture);
 
     s.blendEnabled = glIsEnabled(GL_BLEND);
@@ -63,6 +66,7 @@ GlStateGuard::GlStateGuard() : state_(new State()) {
     s.scissorTestEnabled = glIsEnabled(GL_SCISSOR_TEST);
     s.stencilTestEnabled = glIsEnabled(GL_STENCIL_TEST);
     s.ditherEnabled = glIsEnabled(GL_DITHER);
+    s.alphaTestEnabled = glIsEnabled(GL_ALPHA_TEST);
 
     glGetIntegerv(GL_BLEND_SRC_RGB, &s.blendSrcRGB);
     glGetIntegerv(GL_BLEND_DST_RGB, &s.blendDstRGB);
@@ -91,6 +95,7 @@ GlStateGuard::~GlStateGuard() {
     if (s.scissorTestEnabled) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
     if (s.stencilTestEnabled) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
     if (s.ditherEnabled) glEnable(GL_DITHER); else glDisable(GL_DITHER);
+    if (s.alphaTestEnabled) glEnable(GL_ALPHA_TEST); else glDisable(GL_ALPHA_TEST);
 
     glBlendFuncSeparate(s.blendSrcRGB, s.blendDstRGB, s.blendSrcAlpha, s.blendDstAlpha);
     glBlendEquationSeparate(s.blendEquationRGB, s.blendEquationAlpha);
@@ -119,11 +124,8 @@ GlStateGuard::~GlStateGuard() {
     }
     glUseProgram(s.program);
 
-    const GLint maxUnits = 16;
-    for (GLint i = 0; i < maxUnits; ++i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, s.texture2D[i]);
-    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, s.texture0);
     glActiveTexture(s.activeTexture);
 
     delete state_;

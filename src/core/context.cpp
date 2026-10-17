@@ -471,7 +471,12 @@ void Context::Render() {
         backend_->Draw(queue_, font_, width_, height_);
     } else {
         if (!batcher_) batcher_ = std::make_unique<Batcher>();
-        if (!batcher_->Initialized()) batcher_->Initialize();
+        if (!batcher_->Initialized() && !batcher_->Initialize()) {
+            queue_.Reset();
+            clickedId_ = kInvalidId;
+            releasedId_ = kInvalidId;
+            return;
+        }
         // Defensive state guard: the host pipeline is untouched by our draw.
         GlStateGuard guard;
         batcher_->Draw(queue_, font_, width_, height_);

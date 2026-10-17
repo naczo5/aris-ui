@@ -45,17 +45,23 @@ bool IntersectClip(const Rect* stack, int depth, float& x, float& y, float& w, f
 
 } // namespace
 
-void BuildUiSpans(const CommandQueue& queue, std::vector<UiSpan>& spans) {
-    spans.clear();
-    std::vector<UiVertex> pending;
-    std::uint32_t atlas = 0;
-    float fontSize = -1.f;
+void BuildUiSpans(const CommandQueue& queue, SpanScratch& scratch) {
+    std::vector<UiSpan>& spans = scratch.spans;
+    std::size_t spanCount = 0;
+    UiSpan* cur = nullptr;
     Rect clipStack[32];
     int clipDepth = 0;
 
-    auto stamp = [&](UiSpan& span) {
-        span.atlasId = atlas;
-        span.fontSize = fontSize;
+    // Open (or reuse) the next span slot and stamp it with the current clip
+    // stack. Existing vector capacity is kept across frames.
+    auto openSpan = [&]() -> UiSpan& {
+        if (spanCount == spans.size()) spans.emplace_back();
+        UiSpan& span = spans[spanCount++];
+        span.backdrop = false;
+        span.atlasId = 0;
+        span.fontSize = -1.f;
+        span.scissorX = span.scissorY = span.scissorW = span.scissorH = 0.f;
+        span.verts.clear();
         span.scissor = IntersectClip(clipStack, clipDepth, span.scissorX, span.scissorY,
                                      span.scissorW, span.scissorH);
         if (clipDepth > 0 && !span.scissor) {
@@ -63,14 +69,14 @@ void BuildUiSpans(const CommandQueue& queue, std::vector<UiSpan>& spans) {
             span.scissorW = 0.f;
             span.scissorH = 0.f;
         }
+        return span;
     };
-    auto close = [&]() {
-        if (pending.empty()) return;
-        UiSpan span;
-        stamp(span);
-        span.verts.swap(pending);
-        spans.push_back(std::move(span));
+    // Current accumulation target; opened lazily so empty spans are not emitted.
+    auto current = [&]() -> UiSpan& {
+        if (!cur) cur = &openSpan();
+        return *cur;
     };
+    auto close = [&]() { cur = nullptr; };
 
     for (const DrawCommand& cmd : queue.Commands()) {
         switch (cmd.type) {
@@ -85,18 +91,18 @@ void BuildUiSpans(const CommandQueue& queue, std::vector<UiSpan>& spans) {
             break;
         case DrawCommand::Type::Backdrop: {
             close();
-            UiSpan span;
+            UiSpan& span = openSpan();
             span.backdrop = true;
             span.backdropCmd = cmd;
-            stamp(span);
-            spans.push_back(std::move(span));
             break;
         }
         case DrawCommand::Type::Glyph:
-            if (atlas != cmd.atlasId || fontSize != cmd.fontSize) {
+            if (!cur || cur->atlasId != cmd.atlasId || cur->fontSize != cmd.fontSize) {
                 close();
-                atlas = cmd.atlasId;
-                fontSize = cmd.fontSize;
+                UiSpan& span = openSpan();
+                span.atlasId = cmd.atlasId;
+                span.fontSize = cmd.fontSize;
+                cur = &span;
             }
             {
                 UiVertex proto{};
@@ -107,7 +113,7 @@ void BuildUiSpans(const CommandQueue& queue, std::vector<UiSpan>& spans) {
                 proto.params[3] = 1.f;
                 proto.uv[0] = cmd.u0; proto.uv[1] = cmd.v0;
                 proto.uv[2] = cmd.u1; proto.uv[3] = cmd.v1;
-                PushQuad(pending, proto);
+                PushQuad(cur->verts, proto);
             }
             break;
         case DrawCommand::Type::RoundedRect: {
@@ -133,7 +139,7 @@ void BuildUiSpans(const CommandQueue& queue, std::vector<UiSpan>& spans) {
             PackColor(proto.shadowColor, cmd.shadowColor);
             proto.extra[0] = cmd.gradientDir.x;
             proto.extra[1] = cmd.gradientDir.y;
-            PushQuad(pending, proto);
+            PushQuad(current().verts, proto);
             break;
         }
         case DrawCommand::Type::Triangle: {
@@ -155,7 +161,7 @@ void BuildUiSpans(const CommandQueue& queue, std::vector<UiSpan>& spans) {
             proto.params[0] = th;
             proto.params[3] = 3.f;
             proto.shadow[3] = pad;
-            PushQuad(pending, proto);
+            PushQuad(current().verts, proto);
             break;
         }
         case DrawCommand::Type::Line: {
@@ -172,12 +178,15 @@ void BuildUiSpans(const CommandQueue& queue, std::vector<UiSpan>& spans) {
             proto.params[0] = th;
             proto.params[3] = 2.f;
             proto.shadow[3] = pad;
-            PushQuad(pending, proto);
+            PushQuad(current().verts, proto);
             break;
         }
         }
     }
+
     close();
+    // Shrinking destroys the tail spans (rare); growing reuses slots.
+    spans.resize(spanCount);
 }
 
 } // namespace ui

@@ -49,7 +49,7 @@ if (ARIS_UI_BUILD_TOOLS)
     target_include_directories(aris-atlasgen PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/tools)
     target_link_libraries(aris-atlasgen
         PUBLIC  msdfgen::msdfgen-core msdfgen::msdfgen-ext
-        PRIVATE stb
+        PRIVATE stb nlohmann_json
     )
     target_compile_definitions(aris-atlasgen PRIVATE STB_IMAGE_WRITE_IMPLEMENTATION)
 
@@ -133,8 +133,12 @@ if (ARIS_UI_BUILD_TESTS)
         tests/test_command_queue.cpp
         tests/test_widget_state.cpp
         tests/test_layout.cpp
+        tests/test_shader_source.cpp
     )
-    target_include_directories(aris_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    target_include_directories(aris_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer
+    )
     target_link_libraries(aris_tests PRIVATE aris-ui)
     add_test(NAME aris_tests COMMAND aris_tests)
 endif()

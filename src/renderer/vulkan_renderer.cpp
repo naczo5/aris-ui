@@ -24,6 +24,8 @@ uint32_t FindMemory(const VkPhysicalDeviceMemoryProperties& mem, uint32_t bits, 
 
 } // namespace
 
+VulkanRenderer::VulkanRenderer() = default;
+
 VulkanRenderer::~VulkanRenderer() { Shutdown(); }
 
 bool VulkanRenderer::Init(const VulkanCreateInfo& info) {
@@ -413,21 +415,22 @@ void VulkanRenderer::Draw(const CommandQueue& queue, const FontAtlas* atlas,
     if (!commandBuffer_ || width <= 0.f || height <= 0.f) return;
     if (!EnsureDevice() || pipelinePass_ != info_.renderPass) return;
 
-    std::vector<UiSpan> spans;
-    BuildUiSpans(queue, spans);
+    if (!scratch_) scratch_ = std::make_unique<SpanScratch>();
+    BuildUiSpans(queue, *scratch_);
+    const std::vector<UiSpan>& spans = scratch_->spans;
     if (spans.empty()) return;
 
-    std::vector<UiVertex> all;
+    all_.clear();
     for (const UiSpan& span : spans) {
         if (span.backdrop && !blurWarned_) {
             blurWarned_ = true;
             std::fprintf(stderr, "[aris-ui] vulkan: backdrop blur is OpenGL-only and was skipped\n");
         }
-        all.insert(all.end(), span.verts.begin(), span.verts.end());
+        all_.insert(all_.end(), span.verts.begin(), span.verts.end());
     }
-    if (all.empty()) return;
+    if (all_.empty()) return;
 
-    const VkDeviceSize bytes = all.size() * sizeof(UiVertex);
+    const VkDeviceSize bytes = all_.size() * sizeof(UiVertex);
     if (vertexCapacity_ < bytes) {
         if (vertexBuffer_) destroyBuffer_(info_.device, vertexBuffer_, nullptr);
         if (vertexMemory_) freeMem_(info_.device, vertexMemory_, nullptr);
@@ -450,7 +453,7 @@ void VulkanRenderer::Draw(const CommandQueue& queue, const FontAtlas* atlas,
     }
     void* mapped = nullptr;
     mapMem_(info_.device, vertexMemory_, 0, bytes, 0, &mapped);
-    std::memcpy(mapped, all.data(), static_cast<size_t>(bytes));
+    std::memcpy(mapped, all_.data(), static_cast<size_t>(bytes));
     unmapMem_(info_.device, vertexMemory_);
 
     const float pxRange = (atlas && atlas->Loaded() && atlas->GenerationFontSize() > 0.f)

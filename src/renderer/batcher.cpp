@@ -1,8 +1,13 @@
 #include "ui/renderer/batcher.hpp"
 #include "emit_draw.hpp"
+#include "shader_source.hpp"
 #include "ui/font/font_atlas.hpp"
 #include "ui/renderer/gl_state_guard.hpp"
 #include "glad/gl.h"
+
+#ifndef GL_ALPHA_TEST
+#define GL_ALPHA_TEST 0x0BC0
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -242,32 +247,56 @@ GLuint CompileShader(GLenum type, const char* src) {
     return shader;
 }
 
-std::string SwapShaderVersion(const char* src, const char* versionLine) {
-    const char* nl = std::strchr(src, '\n');
-    if (!nl) return src;
-    std::string out = versionLine;
-    out.append(nl);
-    return out;
-}
+using shader_detail::SwapShaderVersion;
 
 } // namespace
 
 // ---------------------------------------------------------------------------
 // Batcher
 // ---------------------------------------------------------------------------
+Batcher::Batcher() = default;
+
 Batcher::~Batcher() {
     Shutdown();
 }
 
 bool Batcher::Initialize() {
     if (initialized_) return true;
+    if (initFailed_) return false;
 
-    // 330 core is the primary path. Compatibility contexts (Minecraft 1.8.9)
-    // sometimes reject the "core" token or 330 entirely; 150 still has layout
-    // locations and textureSize().
-    const char* versions[] = {"#version 330 core", "#version 330", "#version 150"};
+    // The host (a game swap hook) does not load glad for us.
+    if (!glad_glCreateShader) {
+        if (gladLoaderLoadGL() == 0) {
+            std::fprintf(stderr, "[aris-ui] OpenGL entry points failed to load\n");
+            initFailed_ = true;
+            return false;
+        }
+    }
+
+    int major = 1, minor = 0;
+    const char* ver = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    if (ver) std::sscanf(ver, "%d.%d", &major, &minor);
+    std::fprintf(stderr, "[aris-ui] GL_VERSION %s\n", ver ? ver : "(null)");
+
+    // layout(location) needs GLSL 150. Don't hand a 2.1 driver a 330 shader;
+    // some of them never return from glCompileShader.
+    const char* versions[3];
+    int versionCount = 0;
+    if (major > 3 || (major == 3 && minor >= 3)) {
+        versions[versionCount++] = "#version 330 core";
+        versions[versionCount++] = "#version 330";
+    }
+    if (major > 3 || (major == 3 && minor >= 2))
+        versions[versionCount++] = "#version 150";
+    if (versionCount == 0) {
+        std::fprintf(stderr, "[aris-ui] OpenGL %d.%d is below 3.2; overlay shaders skipped\n", major, minor);
+        initFailed_ = true;
+        return false;
+    }
+
     GLuint vs = 0, fs = 0;
-    for (const char* version : versions) {
+    for (int i = 0; i < versionCount; ++i) {
+        const char* version = versions[i];
         const std::string vsrc = SwapShaderVersion(shaders::kVertexSrc, version);
         const std::string fsrc = SwapShaderVersion(shaders::kFragmentSrc, version);
         vs = CompileShader(GL_VERTEX_SHADER, vsrc.c_str());
@@ -277,7 +306,10 @@ bool Batcher::Initialize() {
         if (fs) glDeleteShader(fs);
         vs = fs = 0;
     }
-    if (!vs || !fs) return false;
+    if (!vs || !fs) {
+        initFailed_ = true;
+        return false;
+    }
 
     program_ = glCreateProgram();
     glAttachShader(program_, vs);
@@ -293,6 +325,9 @@ bool Batcher::Initialize() {
         GLsizei len = 0;
         glGetProgramInfoLog(program_, sizeof(log), &len, log);
         std::fprintf(stderr, "[aris-ui] program link error:\n%.*s\n", (int)len, log);
+        glDeleteProgram(program_);
+        program_ = 0;
+        initFailed_ = true;
         return false;
     }
 
@@ -358,6 +393,7 @@ void Batcher::Shutdown() {
     atlasPtr_ = nullptr;
     atlasRevision_ = 0;
     initialized_ = false;
+    initFailed_ = false;
 }
 
 std::uint32_t Batcher::UploadAtlas(const FontAtlas* atlas) {
@@ -384,6 +420,19 @@ void Batcher::Draw(const CommandQueue& queue, const FontAtlas* atlas,
                    float framebufferWidth, float framebufferHeight) {
    if (!initialized_ && !Initialize()) return;
 
+    // The game leaves depth, culling and a scissor active. Any one of those
+    // drops the overlay. GlStateGuard restores the host state afterwards.
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_ALPHA_TEST);
+    glDepthMask(GL_FALSE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    if (framebufferWidth > 1.f && framebufferHeight > 1.f) {
+        glViewport(0, 0, (GLsizei)framebufferWidth, (GLsizei)framebufferHeight);
+    }
+
     // Premultiplied-alpha compositing. The batcher owns its blend state for the
     // UI pass; GlStateGuard restores the host's state afterwards.
     glEnable(GL_BLEND);
@@ -396,8 +445,9 @@ void Batcher::Draw(const CommandQueue& queue, const FontAtlas* atlas,
     const float atlasGenSize = (atlas && atlas->Loaded()) ? atlas->GenerationFontSize() : 1.f;
     const std::uint32_t atlasTex = UploadAtlas(atlas);
 
-    std::vector<UiSpan> spans;
-    BuildUiSpans(queue, spans);
+    if (!scratch_) scratch_ = std::make_unique<SpanScratch>();
+    BuildUiSpans(queue, *scratch_);
+    const std::vector<UiSpan>& spans = scratch_->spans;
     bool scissorOn = false;
     for (const UiSpan& span : spans) {
         if (span.backdrop) {
@@ -426,8 +476,7 @@ void Batcher::Draw(const CommandQueue& queue, const FontAtlas* atlas,
             glDisable(GL_SCISSOR_TEST);
             scissorOn = false;
         }
-        pending_ = span.verts;
-        Flush(span.atlasId, span.fontSize, atlasPxRange, atlasGenSize, atlasTex, framebufferHeight);
+        Flush(span.verts, span.atlasId, span.fontSize, atlasPxRange, atlasGenSize, atlasTex);
     }
     if (scissorOn) glDisable(GL_SCISSOR_TEST);
 }
@@ -455,17 +504,17 @@ void Batcher::ApplyScissor(const Rect* clipStack, int depth, float framebufferHe
     glScissor((GLint)x0, (GLint)(framebufferHeight - y1), (GLsizei)w, (GLsizei)h);
 }
 
-void Batcher::Flush(std::uint32_t atlasId, float fontSize, float atlasPxRange,
-                    float atlasGenSize, std::uint32_t atlasTex, float framebufferHeight) {
-    if (pending_.empty()) return;
+void Batcher::Flush(const std::vector<UiVertex>& verts, std::uint32_t atlasId, float fontSize,
+                    float atlasPxRange, float atlasGenSize, std::uint32_t atlasTex) {
+    if (verts.empty()) return;
 
     if (std::getenv("ARIS_DEBUG")) {
         static int flushCount = 0;
         if (flushCount++ < 6) {
-            const UiVertex& v = pending_[0];
+            const UiVertex& v = verts[0];
             std::fprintf(stderr, "[aris] flush #%d: verts=%zu atlas=%u tex=%u fontSize=%.1f pxRange=%.2f\n"
                          "  v0: rect=(%.1f,%.1f,%.1f,%.1f) uv=(%.3f,%.3f,%.3f,%.3f) isGlyph=%.0f color=%u,%u,%u,%u\n",
-                         flushCount, pending_.size(), atlasId, atlasTex, fontSize,
+                         flushCount, verts.size(), atlasId, atlasTex, fontSize,
                          atlasGenSize > 0 ? atlasPxRange * (fontSize / atlasGenSize) : atlasPxRange,
                          v.rect[0], v.rect[1], v.rect[2], v.rect[3],
                          v.uv[0], v.uv[1], v.uv[2], v.uv[3], v.params[3],
@@ -476,8 +525,8 @@ void Batcher::Flush(std::uint32_t atlasId, float fontSize, float atlasPxRange,
     glUseProgram(program_);
     glBindVertexArray(vao_);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(pending_.size() * sizeof(UiVertex)),
-                 pending_.data(), GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(verts.size() * sizeof(UiVertex)),
+                 verts.data(), GL_STREAM_DRAW);
 
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(uTex_, 0);
@@ -490,21 +539,7 @@ void Batcher::Flush(std::uint32_t atlasId, float fontSize, float atlasPxRange,
         glUniform1f(uPxRange_, 0.f);
     }
 
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(pending_.size()));
-    pending_.clear();
-}
-
-void Batcher::PushQuad(const UiVertex& proto) {
-    static const float kQuad[6][2] = {
-        {0.f, 0.f}, {1.f, 0.f}, {0.f, 1.f},
-        {1.f, 0.f}, {1.f, 1.f}, {0.f, 1.f},
-    };
-    for (const auto& c : kQuad) {
-        UiVertex v = proto;
-        v.pos[0] = c[0];
-        v.pos[1] = c[1];
-        pending_.push_back(v);
-    }
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(verts.size()));
 }
 
 // ---------------------------------------------------------------------------
